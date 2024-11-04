@@ -2,10 +2,10 @@
   "name": "机场签到配置", 
   "settings": [
     {
-      "id": "airportCookie", // 参数 ID，在脚本中引用
-      "title": "机场 Cookie", // 显示在 BoxJs 中的名称
-      "type": "text", // 参数类型，text 为文本
-      "desc": "用于机场签到的 Cookie 值" // 参数说明
+      "id": "airportCookie",
+      "title": "机场 Cookie", 
+      "type": "text",
+      "desc": "用于机场签到的 Cookie 值"
     },
     {
       "id": "airportUrl",
