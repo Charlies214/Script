@@ -7,15 +7,21 @@ function Env(t,e){class s{constructor(t){this.env=t}send(t,e="GET"){t="string"==
 
 const $ = new Env("机场签到");
 
-// 支持多机场配置
-const airportConfigs = $.getjson('airportConfigs') || [];
+// 从 BoxJs 读取配置
+const url = $.getdata("airportUrl") || "";
+const cookie = $.getdata("airportCookie") || "";
 
-async function checkIn(config) {
+async function checkIn() {
+  if (!url || !cookie) {
+    $notify("机场签到", "配置错误", "请先在 BoxJs 中配置机场地址和Cookie");
+    return;
+  }
+
   const request = {
-    url: config.url,
+    url: url,
     method: "POST",
     headers: {
-      "Cookie": config.cookie,
+      "Cookie": cookie,
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
     }
   };
@@ -24,22 +30,22 @@ async function checkIn(config) {
     const response = await $task.fetch(request);
     if (response.statusCode === 200) {
       const result = JSON.parse(response.body);
-      handleResponse(result, config.name);
+      handleResponse(result);
     } else {
-      $notify(`${config.name}签到`, "签到失败", "状态码：" + response.statusCode);
+      $notify("机场签到", "签到失败", "状态码：" + response.statusCode);
     }
   } catch (error) {
-    $notify(`${config.name}签到`, "签到异常", error.message);
+    $notify("机场签到", "签到异常", error.message);
   }
 }
 
-function handleResponse(result, airportName) {
+function handleResponse(result) {
   if (result.ret === 1) {
     const rewardMessage = result.msg;
     const trafficInfo = result.trafficInfo;
     
     $notify(
-      `${airportName}签到`, 
+      "机场签到", 
       "签到成功", 
       `奖励：${rewardMessage}\n` +
       `今日已用：${trafficInfo.todayUsedTraffic}\n` +
@@ -47,25 +53,11 @@ function handleResponse(result, airportName) {
       `剩余流量：${trafficInfo.unUsedTraffic}`
     );
   } else if (result.ret === 0) {
-    $notify(`${airportName}签到`, "重复签到", result.msg);
+    $notify("机场签到", "重复签到", result.msg);
   } else {
-    $notify(`${airportName}签到`, "签到失败", result.msg);
+    $notify("机场签到", "签到失败", result.msg);
   }
 }
 
-async function main() {
-  if (airportConfigs.length === 0) {
-    $notify("机场签到", "配置错误", "请先在 BoxJs 中配置机场信息");
-    return;
-  }
-
-  for (const config of airportConfigs) {
-    if (config.url && config.cookie) {
-      await checkIn(config);
-      await $.wait(2000);
-    }
-  }
-}
-
-// 执行主函数
-main().then(() => $.done());
+// 执行签到
+checkIn().then(() => $.done());
