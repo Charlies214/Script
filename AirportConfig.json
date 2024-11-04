@@ -1,0 +1,14 @@
+{
+  "settings": {
+    "airportCookie": {
+      "title": "Cookie",
+      "type": "text",
+      "desc": "机场签到的 Cookie 值"
+    },
+    "airportUrl": {
+      "title": "机场 URL",
+      "type": "text",
+      "desc": "机场签到的 URL 地址"
+    }
+  }
+}
