@@ -1,9 +1,8 @@
 {
   "id": "airport.sign.app",
   "name": "机场签到",
-  "author": "@yourname",
-  "icon": "https://raw.githubusercontent.com/yourusername/yourrepo/master/icon.png",
-  "repo": "https://github.com/yourusername/yourrepo",
+  "author": "@Charlie",
+  "icon": "https://raw.githubusercontent.com/black2c7/TheMagic-Icons/main/Icons/Xsus.png",
   "apps": [
     {
       "id": "airportSign",
@@ -25,9 +24,8 @@
           "desc": "填入登录后的Cookie"
         }
       ],
-      "author": "@yourname",
-      "repo": "https://github.com/yourusername/yourrepo",
-      "icons": ["https://raw.githubusercontent.com/yourusername/yourrepo/master/icon.png"]
+      "author": "@Charlie",
+      "icons": ["https://raw.githubusercontent.com/erdongchanyo/icon/main/Airport/Element.png"]
     }
   ]
 }
