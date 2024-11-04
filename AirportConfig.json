@@ -1,11 +1,11 @@
 {
-  "name": "机场签到配置", 
+  "name": "机场签到配置",
   "settings": [
     {
       "id": "airportCookie",
-      "title": "机场 Cookie", 
+      "title": "Cookie",
       "type": "text",
-      "desc": "用于机场签到的 Cookie 值"
+      "desc": "机场签到的 Cookie 值"
     },
     {
       "id": "airportUrl",
