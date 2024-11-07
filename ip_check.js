@@ -1,54 +1,56 @@
 // 脚本名称：节点 IP 信息查询
-// 版本：1.4.0
+// 版本：1.5.0
 
 const $ = new Env('IP Info');
 
 $notify("开始运行", "节点信息查询", "脚本开始执行");
-console.log("脚本开始执行");
 
 !(async () => {
     try {
         // 开始获取节点信息
         $notify("执行中", "", "正在获取节点信息...");
-        console.log("正在获取节点信息...");
 
+        // 修改后的节点信息获取方法
         const nodeInfo = await new Promise((resolve, reject) => {
-            console.log("发送configuration请求");
             $configuration.sendMessage({
                 method: "GET",
-                url: "/v1/policy_groups",
+                url: "/v1/policies",  // 改用 policies 而不是 policy_groups
                 handler: (resp) => {
-                    console.log("收到configuration响应");
+                    if (resp.error) {
+                        $notify("错误", "", "获取策略信息失败：" + resp.error);
+                        reject(new Error(resp.error));
+                        return;
+                    }
+                    
                     try {
-                        const { error, data } = resp;
-                        if (error) {
-                            console.log("configuration错误:", error);
-                            reject(new Error(error));
+                        const data = JSON.parse(resp.data);
+                        if (!data) {
+                            $notify("错误", "", "未获取到策略信息");
+                            reject(new Error("未获取到策略信息"));
                             return;
                         }
-                        console.log("解析数据:", data);
-                        const allGroup = JSON.parse(data);
-                        const selectedProxy = allGroup.find(p => p.type === "static" && p.selected);
-                        if (!selectedProxy) {
-                            console.log("未找到选中节点");
-                            reject(new Error('未找到选中的节点'));
+
+                        // 获取当前节点IP
+                        const proxy = {
+                            proxy_name: "当前节点",
+                            status: data.proxy || data.destNode || ''
+                        };
+
+                        if (!proxy.status) {
+                            $notify("错误", "", "未能获取到节点IP");
+                            reject(new Error("未能获取到节点IP"));
                             return;
                         }
-                        console.log("找到节点:", selectedProxy);
-                        resolve({
-                            proxy_name: selectedProxy.name,
-                            status: selectedProxy.status
-                        });
+
+                        $notify("成功", "", "已获取到节点信息");
+                        resolve(proxy);
                     } catch (err) {
-                        console.log("处理数据错误:", err);
+                        $notify("错误", "", "解析节点信息失败：" + err.message);
                         reject(err);
                     }
                 }
             });
         });
-
-        $notify("节点信息", "", `成功获取节点信息: ${nodeInfo.proxy_name}`);
-        console.log("节点信息:", nodeInfo);
 
         if (!nodeInfo || !nodeInfo.status) {
             throw new Error('无法获取节点IP');
@@ -56,17 +58,15 @@ console.log("脚本开始执行");
 
         const nodeIP = nodeInfo.status;
         $notify("IP信息", "", `节点IP: ${nodeIP}`);
-        console.log("节点IP:", nodeIP);
 
         // 获取IP基础信息
         $notify("执行中", "", "正在获取IP详细信息...");
-        console.log("开始获取IP-API信息");
 
         const ipApiResponse = await $task.fetch({
-            url: `http://ip-api.com/json/${nodeIP}`
+            url: `http://ip-api.com/json/${nodeIP}`,
+            timeout: 5000
         });
         
-        console.log("IP-API响应:", ipApiResponse.body);
         const ipInfo = JSON.parse(ipApiResponse.body);
 
         // 构建结果
@@ -79,10 +79,7 @@ console.log("脚本开始执行");
             `AS: ${ipInfo.as || 'N/A'}`
         ].join('\n');
 
-        // 显示结果
         $notify(title, subtitle, content);
-        console.log("完整结果:", {title, subtitle, content});
-
         $done({
             title: title,
             subtitle: subtitle,
@@ -90,7 +87,6 @@ console.log("脚本开始执行");
         });
 
     } catch (err) {
-        console.log("发生错误:", err);
         $notify('节点信息查询', '❌ 查询失败', err.message || err);
         $done();
     }
