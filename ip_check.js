@@ -76,6 +76,7 @@ function getCurrentNodeIP() {
                 reject(new Error("未获取到节点IP"));
                 return;
             }
+            console.log("获取到的节点IP:", resp.data.trim());
             resolve(resp.data.trim());
         });
     });
@@ -92,4 +93,48 @@ async function getPing0Info(ip) {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                 'Accept-Language': 'zh-CN,zh;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive
+                'Connection': 'keep-alive'
+            }
+        });
+
+        console.log("Ping0响应:", response.body.substring(0, 100) + "...");
+        return parsePing0Info(response.body);
+    } catch (error) {
+        console.log("Ping0请求错误:", error);
+        return {};
+    }
+}
+
+// 解析 Ping0 信息
+function parsePing0Info(html) {
+    try {
+        const getValueByXPath = (content, xpath) => {
+            const regex = new RegExp(xpath.replace(/\//g, '\\/') + '([^<]+)');
+            const match = content.match(regex);
+            return match ? match[1].trim() : 'N/A';
+        };
+
+        const info = {
+            riskValue: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[9]/div[2]/span>'),
+            ipType: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[8]/div[2]/span>'),
+            nativeIP: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[11]/div[2]/span>')
+        };
+
+        console.log("解析到的Ping0信息:", info);
+        return info;
+    } catch (error) {
+        console.log("解析Ping0信息错误:", error);
+        return {
+            riskValue: 'N/A',
+            ipType: 'N/A',
+            nativeIP: 'N/A'
+        };
+    }
+}
+
+function Env(name) {
+    this.name = name;
+    this.log = (msg) => console.log(`[${name}] ${msg}`);
+    this.msg = (title, subtitle, content) => $notify(title, subtitle, content);
+    this.done = (value = {}) => $done(value);
+}
