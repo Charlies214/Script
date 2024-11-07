@@ -1,20 +1,14 @@
 // 脚本名称：节点 IP 信息查询
 // 脚本作者：Assistant
-// 版本：1.1.0
+// 版本：1.2.0
 
 const $ = new Env('IP Info');
-const timeout = 10000; // 设置超时时间为10秒
+const timeout = 15000; // 增加超时时间到15秒
 
 !(async () => {
     try {
         // 获取当前节点IP
-        const nodeInfo = await Promise.race([
-            getNodeInfo(),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('获取节点信息超时')), timeout)
-            )
-        ]);
-        
+        const nodeInfo = await getNodeInfo();
         if (!nodeInfo || !nodeInfo.status) {
             throw new Error('无法获取节点IP');
         }
@@ -22,22 +16,30 @@ const timeout = 10000; // 设置超时时间为10秒
         const nodeIP = nodeInfo.status;
         $.log(`节点IP: ${nodeIP}`);
 
-        // 获取基础IP信息
-        const ipApiInfo = await getIpApiInfo(nodeIP);
-        if (!ipApiInfo) {
-            throw new Error('获取IP基础信息失败');
-        }
-
-        // 获取风险信息
-        const riskInfo = await getScamalyticsInfo(nodeIP);
-        
-        // 获取Ping0信息
-        const ping0Info = await getPing0Info(nodeIP);
+        // 并行请求所有信息
+        const [ipApiInfo, riskInfo, ping0Info, ipv6Info] = await Promise.all([
+            getIpApiInfo(nodeIP).catch(err => {
+                $.log(`IP-API 请求失败: ${err}`);
+                return {};
+            }),
+            getScamalyticsInfo(nodeIP).catch(err => {
+                $.log(`Scamalytics 请求失败: ${err}`);
+                return null;
+            }),
+            getPing0Info(nodeIP).catch(err => {
+                $.log(`Ping0 请求失败: ${err}`);
+                return null;
+            }),
+            getIPv6().catch(err => {
+                $.log(`IPv6 请求失败: ${err}`);
+                return 'N/A';
+            })
+        ]);
 
         // 整合所有信息
         const info = {
             ipv4: nodeIP,
-            ipv6: await getIPv6(),
+            ipv6: ipv6Info,
             city: `${ipApiInfo.city || 'N/A'}, ${ipApiInfo.regionName || 'N/A'}`,
             zip: ipApiInfo.zip || 'N/A',
             country: ipApiInfo.country || 'N/A',
@@ -83,92 +85,104 @@ const timeout = 10000; // 设置超时时间为10秒
 
 // 获取节点信息
 async function getNodeInfo() {
-    const proxy = await httpAPI("/v1/policy_groups");
-    const allGroup = JSON.parse(proxy);
-    const selectedProxy = allGroup.find(p => p.type === "static" && p.selected);
-    if (!selectedProxy) {
-        throw new Error('未找到选中的节点');
-    }
-    return {
-        proxy_name: selectedProxy.name,
-        status: selectedProxy.status
-    };
+    return new Promise((resolve, reject) => {
+        $configuration.sendMessage({
+            method: "GET",
+            url: "/v1/policy_groups",
+            handler: (resp) => {
+                try {
+                    const { error, data } = resp;
+                    if (error) {
+                        reject(new Error(error));
+                        return;
+                    }
+                    const allGroup = JSON.parse(data);
+                    const selectedProxy = allGroup.find(p => p.type === "static" && p.selected);
+                    if (!selectedProxy) {
+                        reject(new Error('未找到选中的节点'));
+                        return;
+                    }
+                    resolve({
+                        proxy_name: selectedProxy.name,
+                        status: selectedProxy.status
+                    });
+                } catch (err) {
+                    reject(err);
+                }
+            }
+        });
+    });
 }
 
 // 获取IPv6地址
 async function getIPv6() {
-    try {
-        const response = await $.http.get({
-            url: 'https://api64.ipify.org?format=json',
-            timeout: timeout
-        });
-        const ipInfo = JSON.parse(response.body);
-        return isIPv6(ipInfo.ip) ? ipInfo.ip : 'N/A';
-    } catch (error) {
-        return 'N/A';
-    }
+    return new Promise((resolve, reject) => {
+        $task.fetch({
+            url: 'https://api64.ipify.org?format=json'
+        }).then(response => {
+            const data = JSON.parse(response.body);
+            resolve(isIPv6(data.ip) ? data.ip : 'N/A');
+        }).catch(reject);
+    });
 }
 
 // 获取IP-API信息
 async function getIpApiInfo(ip) {
-    try {
-        const response = await $.http.get({
-            url: `http://ip-api.com/json/${ip}`,
-            timeout: timeout
-        });
-        return JSON.parse(response.body);
-    } catch (error) {
-        throw new Error('IP-API 查询失败');
-    }
+    return new Promise((resolve, reject) => {
+        $task.fetch({
+            url: `http://ip-api.com/json/${ip}`
+        }).then(response => {
+            resolve(JSON.parse(response.body));
+        }).catch(reject);
+    });
 }
 
 // 获取Scamalytics风险信息
 async function getScamalyticsInfo(ip) {
-    try {
-        const response = await $.http.get({
-            url: `https://scamalytics.com/ip/${ip}`,
-            timeout: timeout
-        });
-        return parseIPRisk(response.body);
-    } catch (error) {
-        return null;
-    }
+    return new Promise((resolve, reject) => {
+        $task.fetch({
+            url: `https://scamalytics.com/ip/${ip}`
+        }).then(response => {
+            resolve(parseIPRisk(response.body));
+        }).catch(reject);
+    });
 }
 
 // 获取Ping0信息
 async function getPing0Info(ip) {
-    try {
-        // 第一次请求获取window.x
-        const firstResponse = await $.http.get({
-            url: `https://ping0.cc/ip/${ip}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
-            },
-            timeout: timeout
-        });
-        
-        const windowX = parseWindowX(firstResponse.body);
-        if (!windowX) {
-            throw new Error('获取 window.x 失败');
+    return new Promise(async (resolve, reject) => {
+        try {
+            // 第一次请求获取window.x
+            const firstResponse = await $task.fetch({
+                url: `https://ping0.cc/ip/${ip}`,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
+                }
+            });
+
+            const windowX = parseWindowX(firstResponse.body);
+            if (!windowX) {
+                reject(new Error('获取 window.x 失败'));
+                return;
+            }
+
+            // 第二次请求获取详细信息
+            const secondResponse = await $task.fetch({
+                url: `https://ping0.cc/ip/${ip}`,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36',
+                    'Cookie': `jskey=${windowX}`
+                }
+            });
+
+            resolve(parsePing0Risk(secondResponse.body));
+        } catch (error) {
+            reject(error);
         }
-
-        // 第二次请求获取详细信息
-        const secondResponse = await $.http.get({
-            url: `https://ping0.cc/ip/${ip}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36',
-                'Cookie': `jskey=${windowX}`
-            },
-            timeout: timeout
-        });
-
-        return parsePing0Risk(secondResponse.body);
-    } catch (error) {
-        return null;
-    }
+    });
 }
 
-// 解析IP风险信息
+// 其他辅助函数保持不变
 function parseIPRisk(html) {
     const scoreMatch = html.match(/"score":"(.*?)"/);
     const riskMatch = html.match(/"risk":"(.*?)"/);
@@ -178,13 +192,11 @@ function parseIPRisk(html) {
     } : null;
 }
 
-// 解析window.x
 function parseWindowX(html) {
     const match = html.match(/window\.x\s*=\s*'([^']+)'/);
     return match ? match[1] : null;
 }
 
-// 解析Ping0风险信息
 function parsePing0Risk(html) {
     const getValueByXPath = (content, xpath) => {
         const regex = new RegExp(xpath.replace(/\//g, '\\/') + '([^<]+)');
@@ -199,32 +211,9 @@ function parsePing0Risk(html) {
     };
 }
 
-// 检查是否为IPv6
 function isIPv6(ip) {
     const ipv6Pattern = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$/;
     return ipv6Pattern.test(ip);
-}
-
-// HTTP API
-function httpAPI(path = "", method = "GET", body = null) {
-    return new Promise((resolve) => {
-        $configuration.sendMessage({
-            method: method,
-            url: path,
-            body: body,
-            handler: (resp) => {
-                try {
-                    const { error, data } = resp;
-                    if (error) {
-                        throw new Error(error);
-                    }
-                    resolve(data);
-                } catch (err) {
-                    throw err;
-                }
-            },
-        });
-    });
 }
 
 // Env类
@@ -233,14 +222,4 @@ function Env(name) {
     this.log = (msg) => console.log(`[${name}] ${msg}`);
     this.msg = (title, subtitle, content) => $notify(title, subtitle, content);
     this.done = (value = {}) => $done(value);
-    this.http = {
-        get: (options) => {
-            return new Promise((resolve, reject) => {
-                $task.fetch(options).then(
-                    (response) => resolve(response),
-                    (reason) => reject(reason)
-                );
-            });
-        }
-    };
 }
