@@ -1,26 +1,36 @@
 // 脚本名称：节点 IP 信息查询
-// 版本：1.9.0
+// 版本：2.0.0
 
 const $ = new Env('IP Info');
 
 !(async () => {
     try {
-        // 1. 获取 IPv4 和 IPv6
-        const [ipv4Response, ipv6Response] = await Promise.all([
-            $task.fetch({
-                url: 'https://api.ipify.org',
-                timeout: 5000
-            }),
-            $task.fetch({
-                url: 'https://api64.ipify.org',
-                timeout: 5000
-            }).catch(() => ({ body: 'N/A' }))
-        ]);
+        // 1. 获取当前节点IP
+        const nodeInfo = await new Promise((resolve, reject) => {
+            $configuration.sendMessage({
+                method: "GET",
+                url: "/v1/policies",
+                handler: (resp) => {
+                    if (resp.error) {
+                        reject(new Error(resp.error));
+                        return;
+                    }
+                    try {
+                        const data = JSON.parse(resp.data);
+                        resolve(data.proxy || data.destNode);
+                    } catch (err) {
+                        reject(err);
+                    }
+                }
+            });
+        });
 
-        const currentIP = ipv4Response.body.trim();
-        const ipv6 = ipv6Response.body.trim();
-        
-        $notify("IP获取成功", "", `IPv4: ${currentIP}\nIPv6: ${ipv6}`);
+        if (!nodeInfo) {
+            throw new Error('无法获取节点IP');
+        }
+
+        const currentIP = nodeInfo;
+        console.log(`当前节点IP: ${currentIP}`);
 
         // 2. 获取 ip-api 基础信息
         const ipApiResponse = await $task.fetch({
@@ -46,7 +56,6 @@ const $ = new Env('IP Info');
         const subtitle = `${currentIP}`;
         const content = [
             `IPv4: ${currentIP}`,
-            `IPv6: ${ipv6 !== currentIP ? ipv6 : 'N/A'}`,
             `风险评分: ${riskInfo ? riskInfo.score : 'N/A'}`,
             `风险类型: ${riskInfo ? riskInfo.risk : 'N/A'}`,
             `Ping0风险值: ${ping0Info ? ping0Info.riskValue : 'N/A'}`,
@@ -71,12 +80,16 @@ const $ = new Env('IP Info');
 
 // 解析IP风险信息
 function parseIPRisk(html) {
-    const scoreMatch = html.match(/"score":"(.*?)"/);
-    const riskMatch = html.match(/"risk":"(.*?)"/);
-    return scoreMatch && riskMatch ? {
-        score: scoreMatch[1],
-        risk: riskMatch[1]
-    } : null;
+    try {
+        const scoreMatch = html.match(/(?:"score"|'score'):\s*["']([^"']+)["']/);
+        const riskMatch = html.match(/(?:"risk"|'risk'):\s*["']([^"']+)["']/);
+        return scoreMatch && riskMatch ? {
+            score: scoreMatch[1],
+            risk: riskMatch[1]
+        } : null;
+    } catch (error) {
+        return null;
+    }
 }
 
 // 获取 Ping0 信息
@@ -104,34 +117,55 @@ async function getPing0Info(ip) {
 
         return parsePing0Risk(secondResponse.body);
     } catch (error) {
+        console.log("Ping0 请求错误:", error);
         return null;
     }
 }
 
 // 解析 window.x
 function parseWindowX(html) {
-    const match = html.match(/window\.x\s*=\s*'([^']+)'/);
-    return match ? match[1] : null;
+    try {
+        const match = html.match(/window\.x\s*=\s*['"]([^'"]+)['"]/);
+        return match ? match[1] : null;
+    } catch (error) {
+        return null;
+    }
 }
 
 // 解析 Ping0 风险信息
 function parsePing0Risk(html) {
-    const getValueByXPath = (content, xpath) => {
-        const regex = new RegExp(xpath.replace(/\//g, '\\/') + '([^<]+)');
-        const match = content.match(regex);
-        return match ? match[1].trim() : '';
-    };
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
 
-    return {
-        riskValue: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[9]/div[2]/span>'),
-        ipType: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[8]/div[2]/span>'),
-        nativeIP: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[11]/div[2]/span>')
-    };
+        const getXPathValue = (xpath) => {
+            try {
+                return doc.evaluate(
+                    xpath,
+                    doc,
+                    null,
+                    XPathResult.STRING_TYPE,
+                    null
+                ).stringValue.trim();
+            } catch (e) {
+                return '';
+            }
+        };
+
+        return {
+            riskValue: getXPathValue("/html/body/div[2]/div[2]/div[1]/div[2]/div[9]/div[2]/span"),
+            ipType: getXPathValue("/html/body/div[2]/div[2]/div[1]/div[2]/div[8]/div[2]/span"),
+            nativeIP: getXPathValue("/html/body/div[2]/div[2]/div[1]/div[2]/div[11]/div[2]/span")
+        };
+    } catch (error) {
+        console.log("解析 Ping0 响应错误:", error);
+        return null;
+    }
 }
 
 function Env(name) {
     this.name = name;
     this.log = (msg) => console.log(`[${name}] ${msg}`);
     this.msg = (title, subtitle, content) => $notify(title, subtitle, content);
-    this.done = (value = {}) => $done(value);
+    this.done = (value = {}) => $done();  // 修改这里，不传递任何值
 }
