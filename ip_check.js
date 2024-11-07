@@ -1,6 +1,3 @@
-// 脚本名称：IP 信息查询
-// 版本：3.3.0
-
 const $ = new Env('IP Info');
 
 !(async () => {
@@ -87,91 +84,12 @@ function getCurrentNodeIP() {
 // 获取 Ping0 信息
 async function getPing0Info(ip) {
     try {
-        console.log("开始第一次Ping0请求");
-        // 第一次请求获取 window.x
-        const firstResponse = await $task.fetch({
+        console.log("开始Ping0请求");
+        const response = await $task.fetch({
             url: `https://ping0.cc/ip/${ip}`,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                 'Accept-Language': 'zh-CN,zh;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive'
-            }
-        });
-
-        console.log("第一次Ping0响应:", firstResponse.body.substring(0, 100) + "...");
-        const windowX = parseWindowX(firstResponse.body);
-        console.log("window.x:", windowX);
-
-        if (!windowX) {
-            console.log("无法获取window.x");
-            return {};
-        }
-
-        console.log("开始第二次Ping0请求");
-        // 第二次请求获取详细信息
-        const secondResponse = await $task.fetch({
-            url: `https://ping0.cc/ip/${ip}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'zh-CN,zh;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Cookie': `jskey=${windowX}`
-            }
-        });
-
-        console.log("第二次Ping0响应:", secondResponse.body.substring(0, 100) + "...");
-        return parsePing0Info(secondResponse.body);
-    } catch (error) {
-        console.log("Ping0请求错误:", error);
-        return {};
-    }
-}
-
-// 解析 window.x
-function parseWindowX(html) {
-    try {
-        const match = html.match(/window\.x\s*=\s*['"]([^'"]+)['"]/);
-        return match ? match[1] : null;
-    } catch (error) {
-        console.log("解析window.x错误:", error);
-        return null;
-    }
-}
-
-// 解析 Ping0 信息
-function parsePing0Info(html) {
-    try {
-        const getValueByXPath = (content, xpath) => {
-            const regex = new RegExp(xpath.replace(/\//g, '\\/') + '([^<]+)');
-            const match = content.match(regex);
-            return match ? match[1].trim() : 'N/A';
-        };
-
-        const info = {
-            riskValue: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[9]/div[2]/span>'),
-            ipType: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[8]/div[2]/span>'),
-            nativeIP: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[11]/div[2]/span>')
-        };
-
-        console.log("解析到的Ping0信息:", info);
-        return info;
-    } catch (error) {
-        console.log("解析Ping0信息错误:", error);
-        return {
-            riskValue: 'N/A',
-            ipType: 'N/A',
-            nativeIP: 'N/A'
-        };
-    }
-}
-
-function Env(name) {
-    this.name = name;
-    this.log = (msg) => console.log(`[${name}] ${msg}`);
-    this.msg = (title, subtitle, content) => $notify(title, subtitle, content);
-    this.done = (value = {}) => $done(value);
-}
+                'Connection': 'keep-alive
