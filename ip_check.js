@@ -1,59 +1,74 @@
 // 脚本名称：节点 IP 信息查询
 // 脚本作者：Assistant
-// 版本：1.0.0
-// 功能：查询节点 IP 的国家、风控值、IP类型等信息
+// 版本：1.1.0
 
 const $ = new Env('IP Info');
+const timeout = 10000; // 设置超时时间为10秒
 
-// 主函数
 !(async () => {
     try {
-        const proxy = await httpAPI("/v1/policy_groups");
-        const { proxy_name: nodeName, status: nodeIP } = await getSelectedProxy(proxy);
+        // 获取当前节点IP
+        const nodeInfo = await Promise.race([
+            getNodeInfo(),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('获取节点信息超时')), timeout)
+            )
+        ]);
         
-        $.log(`节点名称: ${nodeName}`);
-        $.log(`节点IP: ${nodeIP}`);
-
-        // 第一次请求获取 window.x
-        const firstResponse = await $.http.get({
-            url: `https://ping0.cc/ip/${nodeIP}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
-            }
-        });
-
-        // 解析 window.x
-        const windowX = parseWindowX(firstResponse.body);
-        if (!windowX) {
-            throw new Error('获取 window.x 失败');
+        if (!nodeInfo || !nodeInfo.status) {
+            throw new Error('无法获取节点IP');
         }
 
-        // 第二次请求获取详细信息
-        const secondResponse = await $.http.get({
-            url: `https://ping0.cc/ip/${nodeIP}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36',
-                'Cookie': `jskey=${windowX}`
-            }
-        });
+        const nodeIP = nodeInfo.status;
+        $.log(`节点IP: ${nodeIP}`);
 
-        // 解析 IP 信息
-        const ipInfo = parseIPInfo(secondResponse.body);
+        // 获取基础IP信息
+        const ipApiInfo = await getIpApiInfo(nodeIP);
+        if (!ipApiInfo) {
+            throw new Error('获取IP基础信息失败');
+        }
+
+        // 获取风险信息
+        const riskInfo = await getScamalyticsInfo(nodeIP);
         
+        // 获取Ping0信息
+        const ping0Info = await getPing0Info(nodeIP);
+
+        // 整合所有信息
+        const info = {
+            ipv4: nodeIP,
+            ipv6: await getIPv6(),
+            city: `${ipApiInfo.city || 'N/A'}, ${ipApiInfo.regionName || 'N/A'}`,
+            zip: ipApiInfo.zip || 'N/A',
+            country: ipApiInfo.country || 'N/A',
+            isp: ipApiInfo.isp || 'N/A',
+            as: ipApiInfo.as || 'N/A',
+            riskScore: riskInfo ? riskInfo.score : 'N/A',
+            riskType: riskInfo ? riskInfo.risk : 'N/A',
+            ping0Risk: ping0Info ? ping0Info.riskValue : 'N/A',
+            ipType: ping0Info ? ping0Info.ipType : 'N/A',
+            nativeIP: ping0Info ? ping0Info.nativeIP : 'N/A'
+        };
+
         // 构建通知内容
-        const title = '节点 IP 信息';
-        const subtitle = `${nodeName} - ${nodeIP}`;
+        const title = '节点信息查询';
+        const subtitle = `${nodeInfo.proxy_name || 'Unknown Node'}`;
         const content = [
-            `国家/地区：${ipInfo.country || '未知'}`,
-            `风控值：${ipInfo.riskValue || '未知'}`,
-            `IP类型：${ipInfo.ipType || '未知'}`,
-            `原生IP：${ipInfo.nativeIP || '未知'}`
+            `IPv4: ${info.ipv4}`,
+            `IPv6: ${info.ipv6}`,
+            `城市: ${info.city}`,
+            `邮编: ${info.zip}`,
+            `国家: ${info.country}`,
+            `ISP: ${info.isp}`,
+            `AS: ${info.as}`,
+            `风险评分: ${info.riskScore}`,
+            `风险类型: ${info.riskType}`,
+            `Ping0风险值: ${info.ping0Risk}`,
+            `IP类型: ${info.ipType}`,
+            `原生IP: ${info.nativeIP}`
         ].join('\n');
 
-        // 发送通知
         $.msg(title, subtitle, content);
-        
-        // 持久化数据
         $.done({
             title: title,
             subtitle: subtitle,
@@ -61,19 +76,116 @@ const $ = new Env('IP Info');
         });
     } catch (err) {
         $.log(`❌ 错误: ${err.message || err}`);
-        $.msg('IP 信息查询', '❌ 出现错误', err.message || err);
+        $.msg('节点信息查询', '❌ 查询失败', err.message || err);
         $.done();
     }
 })();
 
-// 解析 window.x
+// 获取节点信息
+async function getNodeInfo() {
+    const proxy = await httpAPI("/v1/policy_groups");
+    const allGroup = JSON.parse(proxy);
+    const selectedProxy = allGroup.find(p => p.type === "static" && p.selected);
+    if (!selectedProxy) {
+        throw new Error('未找到选中的节点');
+    }
+    return {
+        proxy_name: selectedProxy.name,
+        status: selectedProxy.status
+    };
+}
+
+// 获取IPv6地址
+async function getIPv6() {
+    try {
+        const response = await $.http.get({
+            url: 'https://api64.ipify.org?format=json',
+            timeout: timeout
+        });
+        const ipInfo = JSON.parse(response.body);
+        return isIPv6(ipInfo.ip) ? ipInfo.ip : 'N/A';
+    } catch (error) {
+        return 'N/A';
+    }
+}
+
+// 获取IP-API信息
+async function getIpApiInfo(ip) {
+    try {
+        const response = await $.http.get({
+            url: `http://ip-api.com/json/${ip}`,
+            timeout: timeout
+        });
+        return JSON.parse(response.body);
+    } catch (error) {
+        throw new Error('IP-API 查询失败');
+    }
+}
+
+// 获取Scamalytics风险信息
+async function getScamalyticsInfo(ip) {
+    try {
+        const response = await $.http.get({
+            url: `https://scamalytics.com/ip/${ip}`,
+            timeout: timeout
+        });
+        return parseIPRisk(response.body);
+    } catch (error) {
+        return null;
+    }
+}
+
+// 获取Ping0信息
+async function getPing0Info(ip) {
+    try {
+        // 第一次请求获取window.x
+        const firstResponse = await $.http.get({
+            url: `https://ping0.cc/ip/${ip}`,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
+            },
+            timeout: timeout
+        });
+        
+        const windowX = parseWindowX(firstResponse.body);
+        if (!windowX) {
+            throw new Error('获取 window.x 失败');
+        }
+
+        // 第二次请求获取详细信息
+        const secondResponse = await $.http.get({
+            url: `https://ping0.cc/ip/${ip}`,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36',
+                'Cookie': `jskey=${windowX}`
+            },
+            timeout: timeout
+        });
+
+        return parsePing0Risk(secondResponse.body);
+    } catch (error) {
+        return null;
+    }
+}
+
+// 解析IP风险信息
+function parseIPRisk(html) {
+    const scoreMatch = html.match(/"score":"(.*?)"/);
+    const riskMatch = html.match(/"risk":"(.*?)"/);
+    return scoreMatch && riskMatch ? {
+        score: scoreMatch[1],
+        risk: riskMatch[1]
+    } : null;
+}
+
+// 解析window.x
 function parseWindowX(html) {
     const match = html.match(/window\.x\s*=\s*'([^']+)'/);
     return match ? match[1] : null;
 }
 
-// 解析 IP 信息
-function parseIPInfo(html) {
+// 解析Ping0风险信息
+function parsePing0Risk(html) {
     const getValueByXPath = (content, xpath) => {
         const regex = new RegExp(xpath.replace(/\//g, '\\/') + '([^<]+)');
         const match = content.match(regex);
@@ -83,25 +195,14 @@ function parseIPInfo(html) {
     return {
         riskValue: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[9]/div[2]/span>'),
         ipType: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[8]/div[2]/span>'),
-        nativeIP: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[11]/div[2]/span>'),
-        country: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[2]/div[2]/span>')
+        nativeIP: getValueByXPath(html, '/html/body/div[2]/div[2]/div[1]/div[2]/div[11]/div[2]/span>')
     };
 }
 
-// 获取当前选中的代理节点
-function getSelectedProxy(proxies) {
-    return new Promise((resolve, reject) => {
-        const allGroup = JSON.parse(proxies);
-        const selectedProxy = allGroup.find(p => p.type === "static" && p.selected);
-        if (!selectedProxy) {
-            reject(new Error('未找到选中的节点'));
-            return;
-        }
-        resolve({
-            proxy_name: selectedProxy.name,
-            status: selectedProxy.status
-        });
-    });
+// 检查是否为IPv6
+function isIPv6(ip) {
+    const ipv6Pattern = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$/;
+    return ipv6Pattern.test(ip);
 }
 
 // HTTP API
@@ -126,9 +227,8 @@ function httpAPI(path = "", method = "GET", body = null) {
     });
 }
 
-// Env 类
+// Env类
 function Env(name) {
-    // 实现必要的 Env 类方法
     this.name = name;
     this.log = (msg) => console.log(`[${name}] ${msg}`);
     this.msg = (title, subtitle, content) => $notify(title, subtitle, content);
