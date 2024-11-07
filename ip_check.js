@@ -1,5 +1,5 @@
 // 脚本名称：IP 信息查询
-// 版本：3.1.0
+// 版本：3.2.0
 
 const $ = new Env('IP Info');
 
@@ -8,19 +8,21 @@ const $ = new Env('IP Info');
         $notify("开始执行", "IP信息查询", "正在获取信息...");
         console.log("开始获取IP信息");
 
-        // 1. 获取当前IP
+        // 1. 获取当前IP (改用纯文本格式)
         const ipResponse = await $task.fetch({
-            url: 'https://api.ipify.org?format=json',
+            url: 'https://api.ipify.org',  // 移除 format=json
             headers: {
-                'Accept': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
 
-        const ipInfo = JSON.parse(ipResponse.body);
-        const currentIP = ipInfo.ip;
-
+        const currentIP = ipResponse.body.trim();
         console.log("获取到IP:", currentIP);
+
+        if (!currentIP || !/^\d+\.\d+\.\d+\.\d+$/.test(currentIP)) {
+            throw new Error('获取IP失败');
+        }
+
         $notify("IP获取成功", "", `当前IP: ${currentIP}`);
 
         // 2. 获取 Scamalytics 风险信息
@@ -32,31 +34,11 @@ const $ = new Env('IP Info');
         });
 
         const riskInfo = parseScamalyticsInfo(scamResponse.body);
-        console.log("风险信息:", riskInfo);
+        console.log("风险信息:", JSON.stringify(riskInfo));
 
-        // 3. 获取 Ping0 信息（两步请求）
-        // 3.1 第一次请求获取 window.x
-        const ping0FirstResponse = await $task.fetch({
-            url: `https://ping0.cc/ip/${currentIP}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-
-        const windowX = parseWindowX(ping0FirstResponse.body);
-        console.log("获取到 window.x:", windowX);
-
-        // 3.2 第二次请求获取详细信息
-        const ping0SecondResponse = await $task.fetch({
-            url: `https://ping0.cc/ip/${currentIP}`,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Cookie': `jskey=${windowX}`
-            }
-        });
-
-        const ping0Info = parsePing0Info(ping0SecondResponse.body);
-        console.log("Ping0信息:", ping0Info);
+        // 3. 获取 Ping0 信息
+        const ping0Info = await getPing0Info(currentIP);
+        console.log("Ping0信息:", JSON.stringify(ping0Info));
 
         // 4. 获取 ip-api 基础信息
         const ipApiResponse = await $task.fetch({
@@ -66,8 +48,14 @@ const $ = new Env('IP Info');
             }
         });
 
-        const ipApiInfo = JSON.parse(ipApiResponse.body);
-        console.log("IP-API信息:", ipApiInfo);
+        let ipApiInfo;
+        try {
+            ipApiInfo = JSON.parse(ipApiResponse.body);
+            console.log("IP-API信息:", JSON.stringify(ipApiInfo));
+        } catch (e) {
+            console.log("IP-API响应解析失败:", ipApiResponse.body);
+            ipApiInfo = {};
+        }
 
         // 整合所有信息
         const content = [
@@ -89,29 +77,67 @@ const $ = new Env('IP Info');
         console.log('错误:', err);
         $notify('IP信息查询', '❌ 查询失败', err.message || err);
     } finally {
-        $done();
+        $done({});  // 添加空对象作为参数
     }
 })();
+
+// 获取 Ping0 信息的完整流程
+async function getPing0Info(ip) {
+    try {
+        // 第一次请求获取 window.x
+        const firstResponse = await $task.fetch({
+            url: `https://ping0.cc/ip/${ip}`,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        const windowX = parseWindowX(firstResponse.body);
+        console.log("window.x:", windowX);
+
+        if (!windowX) {
+            console.log("无法获取window.x");
+            return {};
+        }
+
+        // 第二次请求获取详细信息
+        const secondResponse = await $task.fetch({
+            url: `https://ping0.cc/ip/${ip}`,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Cookie': `jskey=${windowX}`
+            }
+        });
+
+        return parsePing0Info(secondResponse.body);
+    } catch (error) {
+        console.log("Ping0请求错误:", error);
+        return {};
+    }
+}
 
 // 解析 Scamalytics 风险信息
 function parseScamalyticsInfo(html) {
     try {
-        const scoreMatch = html.match(/"score":"([^"]+)"/);
-        const riskMatch = html.match(/"risk":"([^"]+)"/);
+        const scoreMatch = html.match(/(?:"score"|'score'):\s*["']([^"']+)["']/);
+        const riskMatch = html.match(/(?:"risk"|'risk'):\s*["']([^"']+)["']/);
         return {
-            score: scoreMatch ? scoreMatch[1] : null,
-            risk: riskMatch ? riskMatch[1] : null
+            score: scoreMatch ? scoreMatch[1] : 'N/A',
+            risk: riskMatch ? riskMatch[1] : 'N/A'
         };
     } catch (error) {
         console.log("解析风险信息错误:", error);
-        return {};
+        return {
+            score: 'N/A',
+            risk: 'N/A'
+        };
     }
 }
 
 // 解析 window.x
 function parseWindowX(html) {
     try {
-        const match = html.match(/window\.x\s*=\s*'([^']+)'/);
+        const match = html.match(/window\.x\s*=\s*['"]([^'"]+)['"]/);
         return match ? match[1] : null;
     } catch (error) {
         console.log("解析window.x错误:", error);
@@ -125,7 +151,7 @@ function parsePing0Info(html) {
         const getValueByXPath = (content, xpath) => {
             const regex = new RegExp(xpath.replace(/\//g, '\\/') + '([^<]+)');
             const match = content.match(regex);
-            return match ? match[1].trim() : '';
+            return match ? match[1].trim() : 'N/A';
         };
 
         return {
@@ -135,7 +161,11 @@ function parsePing0Info(html) {
         };
     } catch (error) {
         console.log("解析Ping0信息错误:", error);
-        return {};
+        return {
+            riskValue: 'N/A',
+            ipType: 'N/A',
+            nativeIP: 'N/A'
+        };
     }
 }
 
@@ -143,5 +173,5 @@ function Env(name) {
     this.name = name;
     this.log = (msg) => console.log(`[${name}] ${msg}`);
     this.msg = (title, subtitle, content) => $notify(title, subtitle, content);
-    this.done = () => $done();
+    this.done = (value = {}) => $done(value);
 }
