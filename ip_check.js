@@ -1,63 +1,74 @@
-// 脚本名称：节点 IP 信息查询
-// 版本：2.1.0
+// 脚本名称：IP 信息查询
+// 版本：3.0.0
 
 const $ = new Env('IP Info');
-console.log('脚本开始执行');
-$notify("开始执行", "节点信息查询", "正在获取节点信息...");
+const IPAPI_KEY = ''; // 如果需要，可以添加 ip-api.com 的 API key
+const IPINFO_TOKEN = ''; // 如果需要，可以添加 ipinfo.io 的 token
 
 !(async () => {
     try {
-        // 1. 获取当前节点IP
-        console.log('开始获取节点IP');
-        const nodeIP = await new Promise((resolve, reject) => {
-            $configuration.sendMessage({
-                method: "GET",
-                url: "/v1/outbound",  // 改用 outbound 接口
-                handler: function (resp) {
-                    console.log('收到节点响应');
-                    if (resp.error) {
-                        console.log('节点响应错误:', resp.error);
-                        reject(new Error(resp.error));
-                        return;
-                    }
-                    console.log('节点响应数据:', resp.data);
-                    resolve(resp.data);
-                }
-            });
+        $notify("开始执行", "IP信息查询", "正在获取信息...");
+        console.log("开始获取IP信息");
+
+        // 1. 获取基本IP信息
+        const ipResponse = await $task.fetch({
+            url: 'https://ipinfo.io/json',
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
         });
 
-        console.log('节点IP:', nodeIP);
-        $notify("节点信息", "", `当前节点IP: ${nodeIP}`);
+        const ipInfo = JSON.parse(ipResponse.body);
+        const currentIP = ipInfo.ip;
 
-        // 2. 获取基础信息
-        console.log('开始获取IP详细信息');
-        const ipApiResponse = await $task.fetch({
-            url: `http://ip-api.com/json/${nodeIP}`,
-            timeout: 5000
+        console.log("获取到IP:", currentIP);
+        $notify("IP获取成功", "", `当前IP: ${currentIP}`);
+
+        // 2. 获取详细信息
+        const detailResponse = await $task.fetch({
+            url: `http://ip-api.com/json/${currentIP}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,proxy,hosting,query`,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
         });
-        
-        console.log('IP-API响应:', ipApiResponse.body);
-        const ipApiInfo = JSON.parse(ipApiResponse.body);
 
-        // 构建结果
-        const title = 'IP 信息查询';
-        const subtitle = `${nodeIP}`;
+        const details = JSON.parse(detailResponse.body);
+
+        // 3. 获取威胁情报信息
+        const threatResponse = await $task.fetch({
+            url: `https://ipapi.co/${currentIP}/json/`,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        const threatInfo = JSON.parse(threatResponse.body);
+
+        // 整合信息
         const content = [
-            `IPv4: ${nodeIP}`,
-            `城市: ${ipApiInfo.city || 'N/A'}, ${ipApiInfo.regionName || 'N/A'}`,
-            `国家: ${ipApiInfo.country || 'N/A'}`,
-            `ISP: ${ipApiInfo.isp || 'N/A'}`,
-            `AS: ${ipApiInfo.as || 'N/A'}`
+            `IPv4: ${currentIP}`,
+            `IP类型: ${details.proxy ? "代理" : details.hosting ? "主机" : "普通"}`,
+            `风险类型: ${threatInfo.security ? threatInfo.security.threat_level : "低"}`,
+            `ISP: ${details.isp || 'N/A'}`,
+            `AS编号: ${details.as || 'N/A'}`,
+            `组织: ${details.org || 'N/A'}`,
+            `位置: ${details.city || 'N/A'}, ${details.regionName || 'N/A'}, ${details.country || 'N/A'}`,
+            `时区: ${details.timezone || 'N/A'}`
         ].join('\n');
 
-        console.log('发送最终通知');
-        $notify(title, subtitle, content);
+        $notify(
+            'IP 信息查询结果', 
+            currentIP,
+            content
+        );
 
     } catch (err) {
-        console.log('发生错误:', err);
+        console.log('错误:', err);
         $notify('IP信息查询', '❌ 查询失败', err.message || err);
     } finally {
-        console.log('脚本执行完成');
         $done();
     }
 })();
