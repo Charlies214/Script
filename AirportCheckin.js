@@ -18,12 +18,10 @@ function Env(t,e){class s{constructor(t){this.env=t}send(t,e="GET"){t="string"==
 
 const $ = new Env("机场签到");
 
-// 从 BoxJs 读取配置
 const url = $.getdata("airportUrl") || "";
 const email = $.getdata("airportEmail") || "";
 const password = $.getdata("airportPassword") || "";
 
-// 保存登录后的Cookie
 let sessionCookie = '';
 
 async function login() {
@@ -34,54 +32,77 @@ async function login() {
 
     const loginPath = url.indexOf("auth/login") != -1 ? "auth/login" : "user/_login.php";
     const loginUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + loginPath;
-    
+    console.log("登录URL:", loginUrl);  // 添加日志
+
     const loginRequest = {
         url: loginUrl,
         headers: {
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'  // 明确要求JSON响应
         },
         body: `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}&remember_me=week`
     };
 
     try {
         const response = await $.http.post(loginRequest);
-        console.log("登录响应头:", JSON.stringify(response.headers, null, 2));
         
-        const body = JSON.parse(response.body);
-        
+        // 打印原始响应信息
+        console.log("登录响应状态:", response.statusCode);
+        console.log("登录响应头:", typeof response.headers === 'object' ? JSON.stringify(response.headers) : response.headers);
+        console.log("登录响应体:", response.body);
+
+        // 尝试解析响应体
+        let body;
+        try {
+            body = JSON.parse(response.body);
+        } catch (e) {
+            console.log("登录响应解析失败:", e.message);
+            console.log("原始响应内容:", response.body);
+            return false;
+        }
+
         if (body.ret === 1 || body.status === 'success') {
             console.log("登录成功");
             
-            // 获取Set-Cookie
-            const setCookie = response.headers['set-cookie'] || response.headers['Set-Cookie'];
-            if (setCookie) {
-                if (Array.isArray(setCookie)) {
-                    sessionCookie = setCookie.map(cookie => cookie.split(';')[0]).join('; ');
+            // 检查所有可能的cookie头
+            const possibleCookieHeaders = [
+                response.headers['set-cookie'],
+                response.headers['Set-Cookie'],
+                response.headers['SET-COOKIE']
+            ];
+            
+            let cookieHeader = possibleCookieHeaders.find(h => h);
+            
+            if (cookieHeader) {
+                if (Array.isArray(cookieHeader)) {
+                    // 提取每个cookie的名值对部分
+                    sessionCookie = cookieHeader
+                        .map(cookie => cookie.split(';')[0])
+                        .join('; ');
                 } else {
-                    sessionCookie = setCookie.split(';')[0];
+                    sessionCookie = cookieHeader.split(';')[0];
                 }
                 console.log("获取到的Cookie:", sessionCookie);
                 return true;
             } else {
-                console.log("登录成功但未获取到Cookie");
-                $.msg("机场签到", "登录异常", "未获取到Cookie");
+                console.log("警告: 登录成功但未获取到Cookie");
+                console.log("完整响应头:", JSON.stringify(response.headers));
                 return false;
             }
         } else {
-            $.msg("机场签到", "登录失败", body.msg || "邮箱或密码错误");
+            console.log("登录失败:", body.msg || "未知错误");
             return false;
         }
     } catch (error) {
         console.log("登录请求异常:", error);
-        $.msg("机场签到", "登录异常", error.message);
         return false;
     }
 }
 
 async function checkin() {
     if (!sessionCookie) {
-        console.log("未获取到有效的Cookie");
+        console.log("错误: 未获取到有效的Cookie");
         return null;
     }
 
@@ -95,64 +116,65 @@ async function checkin() {
         url: checkinUrl,
         headers: {
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
-            'Cookie': sessionCookie
+            'Cookie': sessionCookie,
+            'Accept': 'application/json',  // 明确要求JSON响应
+            'Content-Type': 'application/json'
         }
     };
 
     try {
         const response = await $.http.post(checkinRequest);
-        console.log("签到响应状态:", response.status);
-        console.log("签到响应头:", JSON.stringify(response.headers, null, 2));
+        
+        // 打印完整响应信息
+        console.log("签到响应状态:", response.statusCode);
+        console.log("签到响应头:", typeof response.headers === 'object' ? JSON.stringify(response.headers) : response.headers);
         console.log("签到响应体:", response.body);
 
-        // 先检查响应内容是否为HTML
+        // 检查响应是否为HTML
         if (response.body.includes('<!DOCTYPE html>') || response.body.includes('<html>')) {
             console.log("签到失败: 返回了HTML页面，可能是认证失败");
+            console.log("HTML内容:", response.body.substring(0, 200) + "..."); // 只打印开头部分
             $.msg("机场签到", "签到失败", "认证失败，请检查Cookie");
             return null;
         }
 
-        const result = JSON.parse(response.body);
-        
+        let result;
+        try {
+            result = JSON.parse(response.body);
+        } catch (e) {
+            console.log("签到响应解析失败:", e.message);
+            console.log("原始响应内容:", response.body);
+            return null;
+        }
+
         if (result.ret === 1 || result.status === 'success') {
-            console.log("签到成功");
+            console.log("签到成功:", result);
             return result;
         } else {
-            if (result.ret === 0 && result.msg?.includes('已经签到')) {
-                console.log("今日已签到");
-                $.msg("机场签到", "今日已签到", result.msg);
-            } else {
-                console.log("签到失败:", result.msg);
-                $.msg("机场签到", "签到失败", result.msg || "未知错误");
-            }
+            console.log("签到失败:", result);
             return null;
         }
     } catch (error) {
         console.log("签到请求异常:", error);
-        if (error.message.includes('JSON')) {
-            console.log("响应内容:", error.response?.body || "无响应内容");
-        }
-        $.msg("机场签到", "签到异常", error.message);
         return null;
     }
 }
 
 async function main() {
     console.log("开始执行签到流程");
+    console.log("配置信息: URL=", url, "Email=", email);
     
-    // 1. 先登录获取Cookie
     const loginSuccess = await login();
     if (!loginSuccess) {
+        $.msg("机场签到", "失败", "登录失败");
         return;
     }
     
-    // 2. 使用Cookie执行签到
     const checkinResult = await checkin();
     if (!checkinResult) {
         return;
     }
     
-    // 3. 处理签到结果
     const trafficInfo = checkinResult.trafficInfo;
     if (trafficInfo) {
         const infoMsg = [
@@ -162,11 +184,10 @@ async function main() {
             `剩余流量：${trafficInfo.unUsedTraffic}`
         ].join('\n');
         
-        $.msg("机场签到", "签到成功", infoMsg);
+        $.msg("机场签到", "成功", infoMsg);
     } else {
-        $.msg("机场签到", "签到成功", checkinResult.msg);
+        $.msg("机场签到", "成功", checkinResult.msg);
     }
 }
 
-// 执行脚本
 main().then(() => $.done());
