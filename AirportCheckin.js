@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3版本
+脚本功能：机场签到V3.1版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
@@ -45,7 +45,11 @@ async function login() {
 
     try {
         const response = await $.http.post(loginRequest);
-        console.log("登录响应头:", JSON.stringify(response.headers, null, 2));
+        
+        // 详细打印响应头信息
+        console.log("完整响应头:", JSON.stringify(response.headers, null, 2));
+        console.log("Set-Cookie头:", response.headers['set-cookie']);
+        console.log("Set-Cookie头(大写):", response.headers['Set-Cookie']);
         
         const body = JSON.parse(response.body);
         console.log("登录响应体:", body);
@@ -53,22 +57,73 @@ async function login() {
         if (body.ret === 1 && body.msg === "登录成功") {
             console.log("登录成功");
             
-            // 处理Set-Cookie
-            const setCookies = response.headers['set-cookie'] || response.headers['Set-Cookie'];
-            if (setCookies && Array.isArray(setCookies)) {
-                // 提取所有cookie的关键信息
-                const cookiePairs = setCookies.map(cookie => {
-                    const mainPart = cookie.split(';')[0];  // 获取cookie的主要部分（去掉expires等信息）
-                    const [name, value] = mainPart.split('=');
-                    return `${name}=${value}`;
+            // 尝试从各种可能的响应头中获取Cookie
+            let cookies = [];
+            
+            // 检查所有可能的Cookie头
+            const cookieHeaders = [
+                response.headers['set-cookie'],
+                response.headers['Set-Cookie'],
+                response.headers['SET-COOKIE']
+            ];
+            
+            // 遍历所有可能的Cookie头
+            for (const header of cookieHeaders) {
+                if (header) {
+                    if (Array.isArray(header)) {
+                        cookies = cookies.concat(header);
+                    } else if (typeof header === 'string') {
+                        cookies.push(header);
+                    }
+                }
+            }
+            
+            if (cookies.length > 0) {
+                // 处理Cookie
+                const cookiePairs = cookies.map(cookie => {
+                    const mainPart = cookie.split(';')[0];
+                    return mainPart;
                 });
                 
-                // 组合所有cookie
                 sessionCookie = cookiePairs.join(';');
                 console.log("获取到的Cookie:", sessionCookie);
+                
+                // 手动构建Cookie
+                const manualCookie = [
+                    `uid=${body.uid || ''}`,
+                    `email=${encodeURIComponent(email)}`,
+                    `key=${body.key || ''}`,
+                    `ip=${body.ip || ''}`,
+                    `expire_in=${body.expire_in || ''}`
+                ].filter(item => !item.endsWith('=')).join(';');
+                
+                console.log("手动构建的Cookie:", manualCookie);
+                
+                // 如果自动获取的Cookie为空，使用手动构建的Cookie
+                if (!sessionCookie && manualCookie) {
+                    sessionCookie = manualCookie;
+                    console.log("使用手动构建的Cookie");
+                }
+                
                 return true;
             } else {
-                console.log("登录成功但未获取到Cookie");
+                console.log("尝试从响应体构建Cookie");
+                // 从响应体构建Cookie
+                const manualCookie = [
+                    `uid=${body.uid || ''}`,
+                    `email=${encodeURIComponent(email)}`,
+                    `key=${body.key || ''}`,
+                    `ip=${body.ip || ''}`,
+                    `expire_in=${body.expire_in || ''}`
+                ].filter(item => !item.endsWith('=')).join(';');
+                
+                if (manualCookie) {
+                    sessionCookie = manualCookie;
+                    console.log("使用响应体构建的Cookie:", sessionCookie);
+                    return true;
+                }
+                
+                console.log("无法获取或构建Cookie");
                 return false;
             }
         } else {
