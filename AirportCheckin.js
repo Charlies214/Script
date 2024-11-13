@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3.1版本
+脚本功能：机场签到V3.2版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
@@ -24,172 +24,133 @@ const password = $.getdata("airportPassword") || "";
 
 let sessionCookie = '';
 
+function initRequest(path) {
+    const baseUrl = url.replace(/(auth|user)\/login(.php)*/g, "");
+    return {
+        url: baseUrl + path,
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+        }
+    };
+}
+
 async function login() {
     if (!url || !email || !password) {
         $.msg("机场签到", "配置错误", "请先在 BoxJs 中配置登录信息");
         return false;
     }
 
-    const loginPath = url.indexOf("auth/login") != -1 ? "auth/login" : "user/_login.php";
-    const loginUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + loginPath;
-    console.log("登录URL:", loginUrl);
+    return new Promise((resolve) => {
+        const loginPath = url.indexOf("auth/login") != -1 ? "auth/login" : "user/_login.php";
+        const request = initRequest(loginPath);
+        request.body = `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}&remember_me=week`;
 
-    const loginRequest = {
-        url: loginUrl,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}&remember_me=week`
-    };
+        console.log("登录URL:", request.url);
+        
+        $.post(request, (error, response, data) => {
+            if (error) {
+                console.log("登录请求错误:", error);
+                resolve(false);
+                return;
+            }
 
-    try {
-        const response = await $.http.post(loginRequest);
-        
-        // 详细打印响应头信息
-        console.log("完整响应头:", JSON.stringify(response.headers, null, 2));
-        console.log("Set-Cookie头:", response.headers['set-cookie']);
-        console.log("Set-Cookie头(大写):", response.headers['Set-Cookie']);
-        
-        const body = JSON.parse(response.body);
-        console.log("登录响应体:", body);
-        
-        if (body.ret === 1 && body.msg === "登录成功") {
-            console.log("登录成功");
-            
-            // 尝试从各种可能的响应头中获取Cookie
-            let cookies = [];
-            
-            // 检查所有可能的Cookie头
-            const cookieHeaders = [
-                response.headers['set-cookie'],
-                response.headers['Set-Cookie'],
-                response.headers['SET-COOKIE']
-            ];
-            
-            // 遍历所有可能的Cookie头
-            for (const header of cookieHeaders) {
-                if (header) {
-                    if (Array.isArray(header)) {
-                        cookies = cookies.concat(header);
-                    } else if (typeof header === 'string') {
-                        cookies.push(header);
+            console.log("响应头:", JSON.stringify(response.headers, null, 2));
+            console.log("响应体:", data);
+
+            try {
+                const body = JSON.parse(data);
+                if (body.ret === 1 && body.msg === "登录成功") {
+                    console.log("登录成功");
+                    
+                    // 从响应头获取Cookie
+                    const setCookie = response.headers['set-cookie'] || response.headers['Set-Cookie'];
+                    if (setCookie) {
+                        if (Array.isArray(setCookie)) {
+                            sessionCookie = setCookie.map(cookie => cookie.split(';')[0]).join(';');
+                        } else {
+                            sessionCookie = setCookie.split(';')[0];
+                        }
+                        console.log("从响应头获取的Cookie:", sessionCookie);
                     }
+                    
+                    // 如果响应头没有Cookie，从响应体构建
+                    if (!sessionCookie) {
+                        sessionCookie = [
+                            `uid=${body.uid || ''}`,
+                            `email=${encodeURIComponent(email)}`,
+                            `key=${body.key || ''}`,
+                            `ip=${body.ip || ''}`,
+                            `expire_in=${body.expire_in || ''}`
+                        ].filter(item => !item.endsWith('=')).join(';');
+                        console.log("从响应体构建的Cookie:", sessionCookie);
+                    }
+                    
+                    resolve(true);
+                } else {
+                    console.log("登录失败:", body.msg);
+                    resolve(false);
                 }
+            } catch (e) {
+                console.log("解析响应失败:", e);
+                resolve(false);
             }
-            
-            if (cookies.length > 0) {
-                // 处理Cookie
-                const cookiePairs = cookies.map(cookie => {
-                    const mainPart = cookie.split(';')[0];
-                    return mainPart;
-                });
-                
-                sessionCookie = cookiePairs.join(';');
-                console.log("获取到的Cookie:", sessionCookie);
-                
-                // 手动构建Cookie
-                const manualCookie = [
-                    `uid=${body.uid || ''}`,
-                    `email=${encodeURIComponent(email)}`,
-                    `key=${body.key || ''}`,
-                    `ip=${body.ip || ''}`,
-                    `expire_in=${body.expire_in || ''}`
-                ].filter(item => !item.endsWith('=')).join(';');
-                
-                console.log("手动构建的Cookie:", manualCookie);
-                
-                // 如果自动获取的Cookie为空，使用手动构建的Cookie
-                if (!sessionCookie && manualCookie) {
-                    sessionCookie = manualCookie;
-                    console.log("使用手动构建的Cookie");
-                }
-                
-                return true;
-            } else {
-                console.log("尝试从响应体构建Cookie");
-                // 从响应体构建Cookie
-                const manualCookie = [
-                    `uid=${body.uid || ''}`,
-                    `email=${encodeURIComponent(email)}`,
-                    `key=${body.key || ''}`,
-                    `ip=${body.ip || ''}`,
-                    `expire_in=${body.expire_in || ''}`
-                ].filter(item => !item.endsWith('=')).join(';');
-                
-                if (manualCookie) {
-                    sessionCookie = manualCookie;
-                    console.log("使用响应体构建的Cookie:", sessionCookie);
-                    return true;
-                }
-                
-                console.log("无法获取或构建Cookie");
-                return false;
-            }
-        } else {
-            console.log("登录失败:", body.msg);
-            return false;
-        }
-    } catch (error) {
-        console.log("登录请求异常:", error);
-        return false;
-    }
+        });
+    });
 }
 
 async function checkin() {
     if (!sessionCookie) {
-        console.log("未获取到有效的Cookie");
+        console.log("未获取到Cookie");
         return null;
     }
 
-    const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
-    const checkinUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + checkinPath;
-    
-    console.log("签到URL:", checkinUrl);
-    console.log("使用的Cookie:", sessionCookie);
+    return new Promise((resolve) => {
+        const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
+        const request = initRequest(checkinPath);
+        request.headers.Cookie = sessionCookie;
 
-    const checkinRequest = {
-        url: checkinUrl,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
-            'Cookie': sessionCookie
-        }
-    };
+        console.log("签到URL:", request.url);
+        console.log("使用的Cookie:", sessionCookie);
 
-    try {
-        const response = await $.http.post(checkinRequest);
-        console.log("签到响应体:", response.body);
-
-        // 检查响应是否为HTML
-        if (response.body.includes('<!DOCTYPE html>') || response.body.includes('<html>')) {
-            console.log("签到失败: 返回了HTML页面，可能是认证失败");
-            $.msg("机场签到", "签到失败", "认证失败，请检查Cookie");
-            return null;
-        }
-
-        const result = JSON.parse(response.body);
-        
-        if (result.ret === 1 || result.status === 'success') {
-            console.log("签到成功");
-            return result;
-        } else {
-            if (result.ret === 0 && result.msg?.includes('已经签到')) {
-                console.log("今日已签到");
-                $.msg("机场签到", "今日已签到", result.msg);
-            } else {
-                console.log("签到失败:", result.msg);
-                $.msg("机场签到", "签到失败", result.msg || "未知错误");
+        $.post(request, (error, response, data) => {
+            if (error) {
+                console.log("签到请求错误:", error);
+                resolve(null);
+                return;
             }
-            return null;
-        }
-    } catch (error) {
-        console.log("签到请求异常:", error);
-        return null;
-    }
+
+            console.log("签到响应:", data);
+
+            try {
+                if (data.includes('<!DOCTYPE html>') || data.includes('<html>')) {
+                    console.log("签到失败: 返回了HTML页面");
+                    $.msg("机场签到", "签到失败", "认证失败，请检查Cookie");
+                    resolve(null);
+                    return;
+                }
+
+                const result = JSON.parse(data);
+                if (result.ret === 1 || result.status === 'success') {
+                    console.log("签到成功");
+                    resolve(result);
+                } else {
+                    console.log("签到失败:", result.msg);
+                    $.msg("机场签到", "签到失败", result.msg || "未知错误");
+                    resolve(null);
+                }
+            } catch (e) {
+                console.log("解析签到响应失败:", e);
+                resolve(null);
+            }
+        });
+    });
 }
 
 async function main() {
     console.log("开始执行签到流程");
+    console.log("配置信息 - URL:", url, "Email:", email);
     
     const loginSuccess = await login();
     if (!loginSuccess) {
