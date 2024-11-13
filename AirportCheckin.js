@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3.3版本
+脚本功能：机场签到V3.4版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
@@ -58,17 +58,35 @@ async function login() {
             }
 
             console.log("\n========== 登录响应 ==========");
+            console.log("响应头:", response.headers);
             console.log("响应数据:", data);
 
             try {
+                // 尝试从响应头获取Cookie
+                if (response.headers && response.headers['Set-Cookie']) {
+                    let cookies = response.headers['Set-Cookie'];
+                    if (Array.isArray(cookies)) {
+                        sessionCookie = cookies.join('; ');
+                    } else if (typeof cookies === 'string') {
+                        sessionCookie = cookies;
+                    }
+                    console.log("\n从响应头获取的Cookie:", sessionCookie);
+
+                    // 如果成功从响应头获取Cookie，直接返回成功
+                    if (validateCookie(sessionCookie)) {
+                        console.log("✅ 成功获取Cookie from headers");
+                        resolve(true);
+                        return;
+                    }
+                }
+
+                // 如果响应头没有有效Cookie，尝试从响应体获取
                 const body = JSON.parse(data);
                 console.log("解析后的响应体:", body);
 
-                // 检查登录是否成功
                 if (body.ret === 1 && body.msg === "登录成功") {
                     console.log("\n✅ 登录成功");
                     
-                    // 从响应体构建Cookie
                     const cookieInfo = {
                         uid: body.uid,
                         email: encodeURIComponent(email),
@@ -80,7 +98,6 @@ async function login() {
                     console.log("\n========== Cookie信息 ==========");
                     console.log("Cookie构建数据:", cookieInfo);
                     
-                    // 过滤掉值为空的字段
                     const cookieParts = Object.entries(cookieInfo)
                         .filter(([_, value]) => value)
                         .map(([key, value]) => `${key}=${value}`);
@@ -106,9 +123,17 @@ async function login() {
     });
 }
 
+function validateCookie(cookie) {
+    if (!cookie) return false;
+    
+    // 检查常见的Cookie标识符
+    const validIdentifiers = ['uid=', 'sid=', 'PHPSESSID=', 'key=', 'auth='];
+    return validIdentifiers.some(identifier => cookie.includes(identifier));
+}
+
 async function checkin() {
-    if (!sessionCookie) {
-        console.log("\n❌ 未获取到Cookie，无法执行签到");
+    if (!validateCookie(sessionCookie)) {
+        console.log("\n❌ Cookie无效或缺失");
         return null;
     }
 
