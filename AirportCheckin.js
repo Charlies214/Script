@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3.2版本
+脚本功能：机场签到V3.3版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
@@ -47,6 +47,7 @@ async function login() {
         const request = initRequest(loginPath);
         request.body = `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}&remember_me=week`;
 
+        console.log("\n========== 登录请求 ==========");
         console.log("登录URL:", request.url);
         
         $.post(request, (error, response, data) => {
@@ -56,44 +57,49 @@ async function login() {
                 return;
             }
 
-            console.log("响应头:", JSON.stringify(response.headers, null, 2));
-            console.log("响应体:", data);
+            console.log("\n========== 登录响应 ==========");
+            console.log("响应数据:", data);
 
             try {
                 const body = JSON.parse(data);
+                console.log("解析后的响应体:", body);
+
+                // 检查登录是否成功
                 if (body.ret === 1 && body.msg === "登录成功") {
-                    console.log("登录成功");
+                    console.log("\n✅ 登录成功");
                     
-                    // 从响应头获取Cookie
-                    const setCookie = response.headers['set-cookie'] || response.headers['Set-Cookie'];
-                    if (setCookie) {
-                        if (Array.isArray(setCookie)) {
-                            sessionCookie = setCookie.map(cookie => cookie.split(';')[0]).join(';');
-                        } else {
-                            sessionCookie = setCookie.split(';')[0];
-                        }
-                        console.log("从响应头获取的Cookie:", sessionCookie);
+                    // 从响应体构建Cookie
+                    const cookieInfo = {
+                        uid: body.uid,
+                        email: encodeURIComponent(email),
+                        key: body.key,
+                        ip: body.ip,
+                        expire_in: body.expire_in
+                    };
+                    
+                    console.log("\n========== Cookie信息 ==========");
+                    console.log("Cookie构建数据:", cookieInfo);
+                    
+                    // 过滤掉值为空的字段
+                    const cookieParts = Object.entries(cookieInfo)
+                        .filter(([_, value]) => value)
+                        .map(([key, value]) => `${key}=${value}`);
+                    
+                    if (cookieParts.length > 0) {
+                        sessionCookie = cookieParts.join(';');
+                        console.log("构建的Cookie:", sessionCookie);
+                        resolve(true);
+                    } else {
+                        console.log("❌ 无法构建有效的Cookie");
+                        resolve(false);
                     }
-                    
-                    // 如果响应头没有Cookie，从响应体构建
-                    if (!sessionCookie) {
-                        sessionCookie = [
-                            `uid=${body.uid || ''}`,
-                            `email=${encodeURIComponent(email)}`,
-                            `key=${body.key || ''}`,
-                            `ip=${body.ip || ''}`,
-                            `expire_in=${body.expire_in || ''}`
-                        ].filter(item => !item.endsWith('=')).join(';');
-                        console.log("从响应体构建的Cookie:", sessionCookie);
-                    }
-                    
-                    resolve(true);
                 } else {
-                    console.log("登录失败:", body.msg);
+                    console.log("❌ 登录失败:", body.msg);
                     resolve(false);
                 }
             } catch (e) {
-                console.log("解析响应失败:", e);
+                console.log("❌ 解析响应失败:", e);
+                console.log("原始响应:", data);
                 resolve(false);
             }
         });
@@ -102,7 +108,7 @@ async function login() {
 
 async function checkin() {
     if (!sessionCookie) {
-        console.log("未获取到Cookie");
+        console.log("\n❌ 未获取到Cookie，无法执行签到");
         return null;
     }
 
@@ -111,21 +117,23 @@ async function checkin() {
         const request = initRequest(checkinPath);
         request.headers.Cookie = sessionCookie;
 
+        console.log("\n========== 签到请求 ==========");
         console.log("签到URL:", request.url);
         console.log("使用的Cookie:", sessionCookie);
 
         $.post(request, (error, response, data) => {
             if (error) {
-                console.log("签到请求错误:", error);
+                console.log("❌ 签到请求错误:", error);
                 resolve(null);
                 return;
             }
 
-            console.log("签到响应:", data);
+            console.log("\n========== 签到响应 ==========");
+            console.log("响应数据:", data);
 
             try {
                 if (data.includes('<!DOCTYPE html>') || data.includes('<html>')) {
-                    console.log("签到失败: 返回了HTML页面");
+                    console.log("❌ 签到失败: 返回了HTML页面");
                     $.msg("机场签到", "签到失败", "认证失败，请检查Cookie");
                     resolve(null);
                     return;
@@ -133,15 +141,16 @@ async function checkin() {
 
                 const result = JSON.parse(data);
                 if (result.ret === 1 || result.status === 'success') {
-                    console.log("签到成功");
+                    console.log("✅ 签到成功");
                     resolve(result);
                 } else {
-                    console.log("签到失败:", result.msg);
+                    console.log("❌ 签到失败:", result.msg);
                     $.msg("机场签到", "签到失败", result.msg || "未知错误");
                     resolve(null);
                 }
             } catch (e) {
-                console.log("解析签到响应失败:", e);
+                console.log("❌ 解析签到响应失败:", e);
+                console.log("原始响应:", data);
                 resolve(null);
             }
         });
