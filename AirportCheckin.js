@@ -46,22 +46,22 @@ async function login() {
 
     try {
         const response = await $.http.post(loginRequest);
+        console.log("登录响应头:", JSON.stringify(response.headers, null, 2));
+        
         const body = JSON.parse(response.body);
         
-        // 检查登录结果
         if (body.ret === 1 || body.status === 'success') {
             console.log("登录成功");
             
             // 获取Set-Cookie
-            const setCookie = response.headers['Set-Cookie'];
+            const setCookie = response.headers['set-cookie'] || response.headers['Set-Cookie'];
             if (setCookie) {
-                // 可能有多个Set-Cookie，我们需要所有的cookie
                 if (Array.isArray(setCookie)) {
-                    sessionCookie = setCookie.join('; ');
+                    sessionCookie = setCookie.map(cookie => cookie.split(';')[0]).join('; ');
                 } else {
-                    sessionCookie = setCookie;
+                    sessionCookie = setCookie.split(';')[0];
                 }
-                console.log("成功获取Cookie");
+                console.log("获取到的Cookie:", sessionCookie);
                 return true;
             } else {
                 console.log("登录成功但未获取到Cookie");
@@ -80,7 +80,6 @@ async function login() {
 }
 
 async function checkin() {
-    // 确保有Cookie
     if (!sessionCookie) {
         console.log("未获取到有效的Cookie");
         return null;
@@ -89,6 +88,9 @@ async function checkin() {
     const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
     const checkinUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + checkinPath;
     
+    console.log("签到URL:", checkinUrl);
+    console.log("使用的Cookie:", sessionCookie);
+
     const checkinRequest = {
         url: checkinUrl,
         headers: {
@@ -99,13 +101,23 @@ async function checkin() {
 
     try {
         const response = await $.http.post(checkinRequest);
+        console.log("签到响应状态:", response.status);
+        console.log("签到响应头:", JSON.stringify(response.headers, null, 2));
+        console.log("签到响应体:", response.body);
+
+        // 先检查响应内容是否为HTML
+        if (response.body.includes('<!DOCTYPE html>') || response.body.includes('<html>')) {
+            console.log("签到失败: 返回了HTML页面，可能是认证失败");
+            $.msg("机场签到", "签到失败", "认证失败，请检查Cookie");
+            return null;
+        }
+
         const result = JSON.parse(response.body);
         
         if (result.ret === 1 || result.status === 'success') {
             console.log("签到成功");
             return result;
         } else {
-            // 处理签到失败的情况
             if (result.ret === 0 && result.msg?.includes('已经签到')) {
                 console.log("今日已签到");
                 $.msg("机场签到", "今日已签到", result.msg);
@@ -117,6 +129,9 @@ async function checkin() {
         }
     } catch (error) {
         console.log("签到请求异常:", error);
+        if (error.message.includes('JSON')) {
+            console.log("响应内容:", error.response?.body || "无响应内容");
+        }
         $.msg("机场签到", "签到异常", error.message);
         return null;
     }
