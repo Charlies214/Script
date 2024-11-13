@@ -18,84 +18,105 @@ function Env(t,e){class s{constructor(t){this.env=t}send(t,e="GET"){t="string"==
 
 const $ = new Env("机场签到");
 
+// 从 BoxJs 读取配置
 const url = $.getdata("airportUrl") || "";
 const email = $.getdata("airportEmail") || "";
 const password = $.getdata("airportPassword") || "";
 
 let sessionCookie = '';
 
+async function checkConfig() {
+    console.log("========== 配置检查 ==========");
+    let isValid = true;
+    
+    if (!url) {
+        console.log("❌ 未配置机场URL");
+        isValid = false;
+    } else {
+        console.log("✅ 机场URL:", url);
+    }
+    
+    if (!email) {
+        console.log("❌ 未配置登录邮箱");
+        isValid = false;
+    } else {
+        console.log("✅ 登录邮箱:", email);
+    }
+    
+    if (!password) {
+        console.log("❌ 未配置登录密码");
+        isValid = false;
+    } else {
+        console.log("✅ 登录密码已配置");
+    }
+    
+    console.log("============================");
+    return isValid;
+}
+
 async function login() {
-    if (!url || !email || !password) {
-        $.msg("机场签到", "配置错误", "请先在 BoxJs 中配置登录信息");
+    // 首先检查配置
+    if (!await checkConfig()) {
+        $.msg("机场签到", "配置错误", "请在BoxJs中完成配置\n需要：机场URL、登录邮箱、登录密码");
         return false;
     }
 
     const loginPath = url.indexOf("auth/login") != -1 ? "auth/login" : "user/_login.php";
     const loginUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + loginPath;
-    console.log("登录URL:", loginUrl);  // 添加日志
+    console.log(`\n========== 登录请求 ==========`);
+    console.log("登录URL:", loginUrl);
 
     const loginRequest = {
         url: loginUrl,
         headers: {
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json'  // 明确要求JSON响应
+            'Accept': 'application/json'
         },
         body: `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}&remember_me=week`
     };
 
     try {
+        console.log("发送登录请求...");
         const response = await $.http.post(loginRequest);
         
-        // 打印原始响应信息
-        console.log("登录响应状态:", response.statusCode);
-        console.log("登录响应头:", typeof response.headers === 'object' ? JSON.stringify(response.headers) : response.headers);
-        console.log("登录响应体:", response.body);
+        console.log("\n---------- 登录响应 ----------");
+        console.log("响应状态:", response.statusCode);
+        console.log("响应头:", JSON.stringify(response.headers, null, 2));
+        console.log("响应体:", response.body);
+        console.log("------------------------------\n");
 
-        // 尝试解析响应体
         let body;
         try {
             body = JSON.parse(response.body);
         } catch (e) {
-            console.log("登录响应解析失败:", e.message);
-            console.log("原始响应内容:", response.body);
+            console.log("❌ 登录响应解析失败:", e.message);
+            console.log("原始响应:", response.body);
             return false;
         }
 
         if (body.ret === 1 || body.status === 'success') {
-            console.log("登录成功");
+            console.log("✅ 登录成功");
             
-            // 检查所有可能的cookie头
-            const possibleCookieHeaders = [
-                response.headers['set-cookie'],
-                response.headers['Set-Cookie'],
-                response.headers['SET-COOKIE']
-            ];
-            
-            let cookieHeader = possibleCookieHeaders.find(h => h);
-            
-            if (cookieHeader) {
-                if (Array.isArray(cookieHeader)) {
-                    // 提取每个cookie的名值对部分
-                    sessionCookie = cookieHeader
-                        .map(cookie => cookie.split(';')[0])
-                        .join('; ');
+            const setCookie = response.headers['set-cookie'] || response.headers['Set-Cookie'];
+            if (setCookie) {
+                if (Array.isArray(setCookie)) {
+                    sessionCookie = setCookie.map(cookie => cookie.split(';')[0]).join('; ');
                 } else {
-                    sessionCookie = cookieHeader.split(';')[0];
+                    sessionCookie = setCookie.split(';')[0];
                 }
-                console.log("获取到的Cookie:", sessionCookie);
+                console.log("✅ 获取到Cookie:", sessionCookie);
                 return true;
             } else {
-                console.log("警告: 登录成功但未获取到Cookie");
-                console.log("完整响应头:", JSON.stringify(response.headers));
+                console.log("❌ 登录成功但未获取到Cookie");
                 return false;
             }
         } else {
-            console.log("登录失败:", body.msg || "未知错误");
+            console.log("❌ 登录失败:", body.msg || "未知错误");
             return false;
         }
     } catch (error) {
-        console.log("登录请求异常:", error);
+        console.log("❌ 登录请求异常:", error);
         return false;
     }
 }
