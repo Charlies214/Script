@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3.7版本
+脚本功能：机场签到V3.8版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
@@ -43,19 +43,15 @@ function login() {
             console.log("登录响应体:", body);
             
             if (body.ret === 1 && body.msg === "登录成功") {
-                // 从响应头获取Cookie
                 if (cookie) {
-                    // 将逗号分隔的Cookie转换为分号分隔
                     const formattedCookie = Array.isArray(cookie) ? 
                         cookie.map(c => c.split(';')[0]).join('; ') : 
                         cookie.split(',').map(c => c.trim().split(';')[0]).join('; ');
                     
                     console.log("格式化后的Cookie:", formattedCookie);
-                    $notify("登录成功", "从响应头获取的Cookie", formattedCookie);
                     return formattedCookie;
                 }
                 
-                // 从响应体构建Cookie
                 const cookieInfo = {
                     uid: body.uid,
                     email: encodeURIComponent(email),
@@ -67,37 +63,26 @@ function login() {
                 const cookieStr = Object.entries(cookieInfo)
                     .filter(([_, value]) => value)
                     .map(([key, value]) => `${key}=${value}`)
-                    .join('; ');  // 使用分号加空格作为分隔符
+                    .join('; ');
                 
                 console.log("构建的Cookie:", cookieStr);
-                $notify("登录成功", "构建的Cookie", cookieStr);
                 return cookieStr;
-            } else {
-                $notify("登录失败", "登录返回错误", body.msg || "未知错误");
-                return null;
             }
-        } else {
-            $notify("登录失败", `状态码: ${response.statusCode}`, response.body);
-            return null;
         }
+        return null;
     }).catch(error => {
         console.log("登录请求错误:", error);
-        $notify("登录异常", "请求失败", JSON.stringify(error));
         return null;
     });
 }
 
 function checkin(cookie) {
     if (!cookie) {
-        $notify("签到失败", "Cookie获取失败", "无法执行签到");
         return Promise.resolve();
     }
 
     const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
     const checkinUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + checkinPath;
-    
-    // 显示用于签到的Cookie信息
-    $notify("开始签到", "签到请求Cookie", cookie);
     
     const request = {
         url: checkinUrl,
@@ -108,15 +93,11 @@ function checkin(cookie) {
         }
     };
 
-    // 显示完整的签到请求信息
-    $notify("签到请求详情", checkinUrl, JSON.stringify(request.headers, null, 2));
-
     return $task.fetch(request).then(response => {
         console.log("签到响应状态码:", response.statusCode);
         
         if (response.statusCode === 200) {
             if (response.body.includes('<!DOCTYPE html>') || response.body.includes('<html>')) {
-                $notify("签到失败", "Cookie无效", "返回了HTML页面");
                 return;
             }
 
@@ -132,24 +113,19 @@ function checkin(cookie) {
                         `📅 上次使用：${trafficInfo.lastUsedTraffic}`,
                         `💎 剩余流量：${trafficInfo.unUsedTraffic}`
                     ].join('\n');
-                    $notify("签到成功", "流量信息", msg);
+                    $notify("签到成功", "", msg);
                 } else {
                     $notify("签到成功", "", result.msg);
                 }
-            } else {
-                const title = result.msg?.includes('已经签到') ? "今日已签到" : "签到失败";
-                $notify(title, "", result.msg || "未知错误");
+            } else if (result.msg?.includes('已经签到')) {
+                $notify("今日已签到", "", result.msg);
             }
-        } else {
-            $notify("签到失败", `状态码: ${response.statusCode}`, response.body);
         }
     }).catch(error => {
         console.log("签到请求错误:", error);
-        $notify("签到异常", "请求失败", JSON.stringify(error));
     });
 }
 
-// 主函数
 login().then(cookie => {
     if (cookie) {
         return checkin(cookie);
