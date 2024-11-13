@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3.5版本
+脚本功能：机场签到V3.6版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
