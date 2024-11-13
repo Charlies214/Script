@@ -1,5 +1,5 @@
 /*
-脚本功能：机场签到V3.6版本
+脚本功能：机场签到V3.7版本
 账号密码登录签到
 【BoxJs】https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/AirportCheckinConfig.json
 
@@ -45,9 +45,14 @@ function login() {
             if (body.ret === 1 && body.msg === "登录成功") {
                 // 从响应头获取Cookie
                 if (cookie) {
-                    console.log("从响应头获取的Cookie (前100字符):", cookie.slice(0, 100));
-                    $notify("登录成功", "从响应头获取Cookie", cookie);
-                    return cookie;
+                    // 将逗号分隔的Cookie转换为分号分隔
+                    const formattedCookie = Array.isArray(cookie) ? 
+                        cookie.map(c => c.split(';')[0]).join('; ') : 
+                        cookie.split(',').map(c => c.trim().split(';')[0]).join('; ');
+                    
+                    console.log("格式化后的Cookie:", formattedCookie);
+                    $notify("登录成功", "从响应头获取的Cookie", formattedCookie);
+                    return formattedCookie;
                 }
                 
                 // 从响应体构建Cookie
@@ -62,10 +67,10 @@ function login() {
                 const cookieStr = Object.entries(cookieInfo)
                     .filter(([_, value]) => value)
                     .map(([key, value]) => `${key}=${value}`)
-                    .join(';');
+                    .join('; ');  // 使用分号加空格作为分隔符
                 
-                console.log("构建的Cookie (前100字符):", cookieStr.slice(0, 100));
-                $notify("登录成功", "已构建Cookie", cookieStr);
+                console.log("构建的Cookie:", cookieStr);
+                $notify("登录成功", "构建的Cookie", cookieStr);
                 return cookieStr;
             } else {
                 $notify("登录失败", "登录返回错误", body.msg || "未知错误");
@@ -91,6 +96,9 @@ function checkin(cookie) {
     const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
     const checkinUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + checkinPath;
     
+    // 显示用于签到的Cookie信息
+    $notify("开始签到", "签到请求Cookie", cookie);
+    
     const request = {
         url: checkinUrl,
         method: "POST",
@@ -99,6 +107,9 @@ function checkin(cookie) {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
     };
+
+    // 显示完整的签到请求信息
+    $notify("签到请求详情", checkinUrl, JSON.stringify(request.headers, null, 2));
 
     return $task.fetch(request).then(response => {
         console.log("签到响应状态码:", response.statusCode);
