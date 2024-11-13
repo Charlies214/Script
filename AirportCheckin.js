@@ -22,184 +22,125 @@ const url = $.getdata("airportUrl") || "";
 const email = $.getdata("airportEmail") || "";
 const password = $.getdata("airportPassword") || "";
 
-let sessionCookie = '';
-
-function initRequest(path) {
-    const baseUrl = url.replace(/(auth|user)\/login(.php)*/g, "");
-    return {
-        url: baseUrl + path,
+function login() {
+    const request = {
+        url: url,
+        method: "POST",
         headers: {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json'
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        },
+        body: `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}`
+    };
+
+    return $task.fetch(request).then(response => {
+        console.log("登录响应状态码:", response.statusCode);
+        
+        if (response.statusCode === 200) {
+            const cookie = response.headers['Set-Cookie'];
+            const body = JSON.parse(response.body);
+            
+            console.log("登录响应体:", body);
+            
+            if (body.ret === 1 && body.msg === "登录成功") {
+                // 从响应头获取Cookie
+                if (cookie) {
+                    console.log("从响应头获取的Cookie (前100字符):", cookie.slice(0, 100));
+                    $notify("登录成功", "从响应头获取Cookie", cookie);
+                    return cookie;
+                }
+                
+                // 从响应体构建Cookie
+                const cookieInfo = {
+                    uid: body.uid,
+                    email: encodeURIComponent(email),
+                    key: body.key,
+                    ip: body.ip,
+                    expire_in: body.expire_in
+                };
+                
+                const cookieStr = Object.entries(cookieInfo)
+                    .filter(([_, value]) => value)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(';');
+                
+                console.log("构建的Cookie (前100字符):", cookieStr.slice(0, 100));
+                $notify("登录成功", "已构建Cookie", cookieStr);
+                return cookieStr;
+            } else {
+                $notify("登录失败", "登录返回错误", body.msg || "未知错误");
+                return null;
+            }
+        } else {
+            $notify("登录失败", `状态码: ${response.statusCode}`, response.body);
+            return null;
+        }
+    }).catch(error => {
+        console.log("登录请求错误:", error);
+        $notify("登录异常", "请求失败", JSON.stringify(error));
+        return null;
+    });
+}
+
+function checkin(cookie) {
+    if (!cookie) {
+        $notify("签到失败", "Cookie获取失败", "无法执行签到");
+        return Promise.resolve();
+    }
+
+    const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
+    const checkinUrl = url.replace(/(auth|user)\/login(.php)*/g, "") + checkinPath;
+    
+    const request = {
+        url: checkinUrl,
+        method: "POST",
+        headers: {
+            "Cookie": cookie,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
     };
-}
 
-async function login() {
-    if (!url || !email || !password) {
-        const msg = "请先在 BoxJs 中配置：\n• 机场URL\n• 登录邮箱\n• 登录密码";
-        $.msg("机场签到", "配置错误 ❌", msg);
-        return false;
-    }
-
-    return new Promise((resolve) => {
-        const loginPath = url.indexOf("auth/login") != -1 ? "auth/login" : "user/_login.php";
-        const request = initRequest(loginPath);
-        request.body = `email=${encodeURIComponent(email)}&passwd=${encodeURIComponent(password)}&remember_me=week`;
-
-        console.log("=================== 登录信息 ===================");
-        console.log(`登录地址：${request.url}`);
-        console.log(`登录邮箱：${email}`);
+    return $task.fetch(request).then(response => {
+        console.log("签到响应状态码:", response.statusCode);
         
-        $.post(request, (error, response, data) => {
-            if (error) {
-                console.log(`请求异常：${error}`);
-                $.msg("机场签到", "登录失败 ❌", error);
-                resolve(false);
+        if (response.statusCode === 200) {
+            if (response.body.includes('<!DOCTYPE html>') || response.body.includes('<html>')) {
+                $notify("签到失败", "Cookie无效", "返回了HTML页面");
                 return;
             }
 
-            try {
-                console.log("=================== 登录结果 ===================");
-                console.log(`响应数据：${data}`);
-                
-                const body = JSON.parse(data);
-                
-                if (body.ret === 1 && body.msg === "登录成功") {
-                    console.log("登录状态：成功 ✅");
-                    
-                    // 构建Cookie信息
-                    const cookieInfo = {
-                        uid: body.uid,
-                        email: encodeURIComponent(email),
-                        key: body.key,
-                        ip: body.ip,
-                        expire_in: body.expire_in
-                    };
-                    
-                    console.log("=================== Cookie信息 ===================");
-                    Object.entries(cookieInfo).forEach(([key, value]) => {
-                        console.log(`${key}: ${value}`);
-                    });
-                    
-                    // 构建Cookie字符串
-                    const cookieParts = Object.entries(cookieInfo)
-                        .filter(([_, value]) => value)
-                        .map(([key, value]) => `${key}=${value}`);
-                    
-                    if (cookieParts.length > 0) {
-                        sessionCookie = cookieParts.join(';');
-                        console.log("\nCookie构建成功 ✅");
-                        console.log(`完整Cookie：${sessionCookie}`);
-                        
-                        // 发送Cookie通知
-                        const cookieMsg = [
-                            "登录成功，已获取Cookie：",
-                            ...cookieParts
-                        ].join('\n');
-                        $.msg("机场签到", "Cookie获取成功 ✅", cookieMsg);
-                        
-                        resolve(true);
-                    } else {
-                        console.log("\nCookie构建失败 ❌");
-                        $.msg("机场签到", "Cookie获取失败 ❌", "无法从登录响应构建Cookie");
-                        resolve(false);
-                    }
+            const result = JSON.parse(response.body);
+            console.log("签到响应:", result);
+
+            if (result.ret === 1 || result.status === 'success') {
+                const trafficInfo = result.trafficInfo;
+                if (trafficInfo) {
+                    const msg = [
+                        `✨ ${result.msg}`,
+                        `📊 今日已用：${trafficInfo.todayUsedTraffic}`,
+                        `📅 上次使用：${trafficInfo.lastUsedTraffic}`,
+                        `💎 剩余流量：${trafficInfo.unUsedTraffic}`
+                    ].join('\n');
+                    $notify("签到成功", "流量信息", msg);
                 } else {
-                    console.log(`登录失败：${body.msg}`);
-                    $.msg("机场签到", "登录失败 ❌", body.msg || "登录返回数据异常");
-                    resolve(false);
+                    $notify("签到成功", "", result.msg);
                 }
-            } catch (e) {
-                console.log(`解析异常：${e}`);
-                $.msg("机场签到", "登录异常 ❌", `响应解析失败：${e.message}`);
-                resolve(false);
+            } else {
+                const title = result.msg?.includes('已经签到') ? "今日已签到" : "签到失败";
+                $notify(title, "", result.msg || "未知错误");
             }
-        });
+        } else {
+            $notify("签到失败", `状态码: ${response.statusCode}`, response.body);
+        }
+    }).catch(error => {
+        console.log("签到请求错误:", error);
+        $notify("签到异常", "请求失败", JSON.stringify(error));
     });
 }
 
-async function checkin() {
-    if (!sessionCookie) {
-        console.log("签到终止：未获取到Cookie");
-        return null;
+// 主函数
+login().then(cookie => {
+    if (cookie) {
+        return checkin(cookie);
     }
-
-    return new Promise((resolve) => {
-        const checkinPath = url.indexOf("auth/login") != -1 ? "user/checkin" : "user/_checkin.php";
-        const request = initRequest(checkinPath);
-        request.headers.Cookie = sessionCookie;
-
-        console.log("=================== 签到信息 ===================");
-        console.log(`签到地址：${request.url}`);
-        console.log(`使用Cookie：${sessionCookie}`);
-
-        $.post(request, (error, response, data) => {
-            if (error) {
-                console.log(`签到异常：${error}`);
-                $.msg("机场签到", "签到失败 ❌", `请求异常：${error}`);
-                resolve(null);
-                return;
-            }
-
-            console.log("=================== 签到结果 ===================");
-            console.log(`响应数据：${data}`);
-
-            try {
-                if (data.includes('<!DOCTYPE html>') || data.includes('<html>')) {
-                    console.log("签到失败：返回了HTML页面");
-                    $.msg("机场签到", "签到失败 ❌", "Cookie无效或已过期");
-                    resolve(null);
-                    return;
-                }
-
-                const result = JSON.parse(data);
-                if (result.ret === 1 || result.status === 'success') {
-                    console.log("签到状态：成功 ✅");
-                    resolve(result);
-                } else {
-                    console.log(`签到失败：${result.msg}`);
-                    const msg = result.msg?.includes('已经签到') ? 
-                        "今日已签到 ⚠️" : "签到失败 ❌";
-                    $.msg("机场签到", msg, result.msg || "未知错误");
-                    resolve(null);
-                }
-            } catch (e) {
-                console.log(`解析异常：${e}`);
-                $.msg("机场签到", "签到异常 ❌", `响应解析失败：${e.message}`);
-                resolve(null);
-            }
-        });
-    });
-}
-
-async function main() {
-    console.log("=================== 开始执行 ===================");
-    
-    const loginSuccess = await login();
-    if (!loginSuccess) {
-        return;
-    }
-    
-    const checkinResult = await checkin();
-    if (!checkinResult) {
-        return;
-    }
-    
-    const trafficInfo = checkinResult.trafficInfo;
-    if (trafficInfo) {
-        const infoMsg = [
-            `✨ ${checkinResult.msg}`,
-            `📊 今日已用：${trafficInfo.todayUsedTraffic}`,
-            `📅 上次使用：${trafficInfo.lastUsedTraffic}`,
-            `💎 剩余流量：${trafficInfo.unUsedTraffic}`
-        ].join('\n');
-        
-        $.msg("机场签到", "签到成功 ✅", infoMsg);
-    } else {
-        $.msg("机场签到", "签到成功 ✅", checkinResult.msg);
-    }
-}
-
-main().then(() => $.done());
+}).finally(() => $done());
