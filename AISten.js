@@ -1,11 +1,18 @@
 /*************************************
-AISten Pro 解锁会员
+
+项目名称：AISten Pro 解锁会员
+使用声明：⚠️仅供参考，🈲转载与售卖！
+
+**************************************
+
 [rewrite_local]
 ^https:\/\/api\.rc-backup\.com\/v1\/(subscribers|receipts|product_entitlement_mapping) url script-response-body https://raw.githubusercontent.com/charlies0214/ProxyRewrite/refs/heads/main/AISten.js
 
 [mitm]
 hostname = api.rc-backup.com
+
 *************************************/
+
 
 var body = $response.body;
 var url = $request.url;
