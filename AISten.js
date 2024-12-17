@@ -6,7 +6,7 @@
 **************************************
 
 [rewrite_local]
-^https:\/\/api\.rc-backup\.com\/v1\/(subscribers|receipts|product_entitlement_mapping) url script-response-body https://raw.githubusercontent.com/charlies0214/ProxyRewrite/refs/heads/main/AISten.js
+^https:\/\/api\.rc-backup\.com\/v1\/(subscribers|receipts|product_entitlement_mapping) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/AISten.js
 
 [mitm]
 hostname = api.rc-backup.com
