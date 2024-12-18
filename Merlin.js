@@ -7,9 +7,9 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/api\.revenuecat\.com\/v1\/(subscribers|receipts) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/merlin.js
-^https?:\/\/api\.revenuecat\.com\/v1\/(product_entitlement_mapping|subscribers\/.*\/offerings) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/merlin.js
-^https?:\/\/securetoken\.googleapis\.com\/v1\/token url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/merlin.js
+^https?:\/\/api\.revenuecat\.com\/v1\/(subscribers|receipts) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/Merlin.js
+^https?:\/\/api\.revenuecat\.com\/v1\/(product_entitlement_mapping|subscribers\/.*\/offerings) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/Merlin.js
+^https?:\/\/securetoken\.googleapis\.com\/v1\/token url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/Merlin.js
 
 [mitm]
 hostname = api.revenuecat.com, securetoken.googleapis.com
