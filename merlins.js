@@ -9,7 +9,7 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/arcane\.getmerlin\.in\/v1\/user\/status url script-response-body https://raw.githubusercontent.com/Charlie/Rewrite/main/merlins.js
+^https?:\/\/arcane\.getmerlin\.in\/v1\/user\/status url script-response-body https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/merlins.js
 
 [mitm]
 hostname = arcane.getmerlin.in
