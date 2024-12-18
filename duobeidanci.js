@@ -22,6 +22,7 @@ var obj = JSON.parse(body);
 if (url.indexOf('getIndex') != -1) {
     // 修改 getIndex 接口响应
     obj.is_vip = 1;
+    obj.duobi = 999999
     obj.new_is_vip = 1;
     obj.vip_time = "2099-12-31 23:59:59";
     obj.study_amount_limit = 999999;
@@ -42,7 +43,7 @@ if (url.indexOf('getIndex') != -1) {
     // 修改用户信息
     if (obj.info) {
         obj.info.is_vip = "1";
-        obj.info.duobi = 99999;
+        obj.info.duobi = 999999;
     }
     
     // 保留原有用户数据
