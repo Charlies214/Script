@@ -7,7 +7,7 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/api\.revenuecat\.com\/v1\/(subscribers|receipts) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/main/merlin.js
+^https?:\/\/api\.revenuecat\.com\/v1\/(subscribers|receipts) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/merlin.js
 ^https?:\/\/api\.revenuecat\.com\/v1\/(product_entitlement_mapping|subscribers\/.*\/offerings) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/merlin.js
 
 [mitm]
