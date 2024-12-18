@@ -7,7 +7,7 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/olegbarinov\.me\/solves\/ios\/config\.json url script-response-body https://raw.githubusercontent.com/Charlies214/Script/main/solves.js
+^https?:\/\/olegbarinov\.me\/solves\/ios\/config\.json url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/solves.js
 
 [mitm]
 hostname = olegbarinov.me
