@@ -37,6 +37,26 @@ if (url.indexOf('getIndex') != -1) {
         "target_study_duration": 100
     };
 
+    // 修改任务数据
+    obj.task_data = {
+        "sign": {
+            "experience_points": 100,
+            "is_complete": true
+        },
+        "learn": {
+            "experience_points": 100,
+            "is_complete": true
+        },
+        "review": {
+            "experience_points": 100,
+            "is_complete": true
+        },
+        "study_duration": {
+            "experience_points": 100,
+            "is_complete": true
+        }
+    };
+
 } else if (url.indexOf('getInfo') != -1) {
     // 修改 getInfo 接口响应
     obj.is_vip = 1;
