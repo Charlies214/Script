@@ -8,7 +8,7 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/www\.duobeidanci\.com\/Mobile(Account\/getIndex|Device\/getInfo) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
+^https?:\/\/www\.duobeidanci\.com\/Mobile(Account\/getIndex|Device\/getInfo|Account\/getTaskReward) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
 ^https?:\/\/www\.duobeidanci\.com\/ai\/checkDuobi url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
 
 [mitm]
@@ -80,6 +80,12 @@ if (url.indexOf('getIndex') != -1) {
     obj = {
         "flag": 100,
         "msg": "success"
+    };
+} else if (url.indexOf('getTaskReward') != -1) {
+    // 修改 getTaskReward 接口响应
+    obj = {
+        "flag": 100,
+        "msg": "领取成功"
     };
 }
 
