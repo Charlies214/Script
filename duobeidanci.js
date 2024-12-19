@@ -9,6 +9,7 @@
 
 [rewrite_local]
 ^https?:\/\/www\.duobeidanci\.com\/Mobile(Account\/getIndex|Device\/getInfo) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
+^https?:\/\/www\.duobeidanci\.com\/ai\/checkDuobi url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
 
 [mitm]
 hostname = www.duobeidanci.com
@@ -53,6 +54,12 @@ if (url.indexOf('getIndex') != -1) {
             "is_del": "0"
         };
     }
+} else if (url.indexOf('checkDuobi') != -1) {
+    // 修改 checkDuobi 接口响应
+    obj = {
+        "flag": 100,
+        "msg": "success"
+    };
 }
 
 $done({body: JSON.stringify(obj)});
