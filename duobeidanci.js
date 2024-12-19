@@ -85,7 +85,8 @@ if (url.indexOf('getIndex') != -1) {
     // 修改 getTaskReward 接口响应
     obj = {
         "flag": 100,
-        "msg": "领取成功"
+        "duobi": 1500,
+        "vocabulary_limit": 5
     };
 }
 
