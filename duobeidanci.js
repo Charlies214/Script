@@ -8,8 +8,7 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/www\.duobeidanci\.com\/Mobile(Account\/getIndex|Device\/getInfo|Account\/getTaskReward) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
-^https?:\/\/www\.duobeidanci\.com\/ai\/checkDuobi url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
+^https?:\/\/www\.duobeidanci\.com\/(Mobile(Account\/getIndex|Device\/getInfo|Account\/getTaskReward)|ai\/checkDuobi) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/duobeidanci.js
 
 [mitm]
 hostname = www.duobeidanci.com
