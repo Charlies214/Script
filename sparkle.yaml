@@ -1,0 +1,276 @@
+// sparkle-script
+
+// =======================================================================
+// I. 全局开关与核心配置
+// =======================================================================
+
+/**
+ * @description 全局脚本总开关
+ * 如果设置为 false，整个脚本将不执行任何操作，直接返回原始配置。
+ */
+const enable = true;
+
+/**
+ * @description 服务策略组开关
+ * 用于控制是否生成特定服务的策略组和相关规则。
+ * true: 生成 | false: 不生成
+ * 例如，将 spotify 设置为 true，脚本就会自动创建 "Spotify" 策略组和匹配 Spotify 流量的规则。
+ */
+const ruleOptions = {
+    apple: true,      // 苹果服务
+    microsoft: true,  // 微软服务
+    google: true,     // Google服务
+    openai: true,     // 国外AI和GPT
+    spotify: false,   // Spotify
+    youtube: true,    // YouTube
+    bahamut: false,   // 巴哈姆特/动画疯
+    netflix: false,   // Netflix网飞
+    tiktok: false,    // 国际版抖音
+    disney: false,    // 迪士尼
+    pixiv: false,     // Pixiv
+    hbo: false,       // HBO
+    biliintl: false,  // 哔哩哔哩东南亚
+    tvb: false,       // TVB
+    hulu: false,      // Hulu
+    primevideo: false,// 亚马逊prime video
+    telegram: true,   // Telegram通讯软件
+    line: false,      // Line通讯软件
+    whatsapp: false,  // Whatsapp
+    games: true,      // 游戏策略组
+    japan: true,      // 日本网站策略组
+    tracker: true,    // 网络分析和跟踪服务
+    ads: true,        // 常见的网络广告
+    github: true,     // GitHub
+};
+
+/**
+ * @description 区域节点自动分组配置
+ * 脚本会根据这里的配置，自动筛选你的代理节点并创建对应的策略组。
+ */
+const regionOptions = {
+    // 是否排除高倍率节点，当前未在代码中直接使用，但可作为未来扩展的开关
+    excludeHighPercentage: true, 
+    regions: [
+        // name: 最终生成的策略组名称
+        // regex: 用于匹配节点名称的正则表达式，匹配到的节点会被归入此组
+        // ratioLimit: 倍率上限，节点名称中提取出的倍率高于此值将被忽略
+        // icon: 策略组的图标URL
+        { name: 'HK香港', regex: /港|🇭🇰|hk|hongkong|hong kong/i, ratioLimit: 2, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Hong_Kong.png' },
+        { name: 'US美国', regex: /美|🇺🇸|us|united state|america/i, ratioLimit: 2, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/United_States.png' },
+        { name: 'JP日本', regex: /日本|🇯🇵|jp|japan/i, ratioLimit: 2, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Japan.png' },
+        { name: 'KR韩国', regex: /韩|🇰🇷|kr|korea/i, ratioLimit: 2, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Korea.png' },
+        { name: 'SG新加坡', regex: /新加坡|🇸🇬|sg|singapore/i, ratioLimit: 2, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Singapore.png' },
+        { name: 'TW台湾省', regex: /台湾|🇹🇼|tw|taiwan|tai wan/i, ratioLimit: 2, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/China.png' },
+        // ... 其他区域 ...
+    ],
+};
+
+/**
+ * @description DNS 服务器配置
+ */
+const chinaDNS = ['119.29.29.29', '223.5.5.5'];
+const foreignDNS = ['tls://8.8.8.8', 'tls://1.1.1.1', 'tls://9.9.9.9'];
+
+/**
+ * @description 通用模板配置
+ * 这些是创建规则集 (rule-provider) 和策略组 (proxy-group) 时共享的默认设置。
+ */
+// 规则集通用配置：类型、格式、自动更新间隔（86400秒 = 24小时）
+const ruleProviderCommon = { type: 'http', format: 'yaml', interval: 86400 };
+// 代理组通用配置：健康检查间隔、超时、URL等
+const groupBaseOption = { interval: 300, timeout: 3000, url: 'http://cp.cloudflare.com/generate_204', lazy: true, 'max-failed-times': 3, hidden: false };
+
+// =======================================================================
+// II. 服务定义中心 (核心)
+// =======================================================================
+/**
+ * @description 这是整个脚本的“大脑”和“蓝图”。
+ * 数组中的每一个对象都定义了一个“服务”（如YouTube, Google等）。
+ * 脚本会遍历这个数组，根据 `ruleOptions` 的开关状态，为每个启用的服务自动生成规则和策略组。
+ *
+ * 每个服务对象的结构:
+ *   - key: 必须与 `ruleOptions` 中的键名完全对应，用于判断开关状态。
+ *   - name: 将要创建的策略组的名称，也是规则中引用的策略目标。
+ *   - icon: 策略组的图标URL。
+ *   - url: (可选) 策略组的健康检查URL。
+ *   - rules: 一个数组，包含了匹配此服务流量的所有规则。
+ *     - 如果规则不包含策略组 (如 'GEOSITE,youtube')，脚本会自动追加 `name` 字段作为其策略组。
+ *     - 如果规则已包含策略组 (如 'GEOSITE,microsoft@cn,国内网站')，则保持不变。
+ *   - providers: (可选) 如果服务需要额外的 `rule-set`，在这里定义。
+ *   - proxies: (可选) 自定义此服务策略组内的代理列表。如果未定义，将使用下面的 `defaultProxies`。
+ */
+const serviceDefinitions = [
+    // 基础服务
+    { key: 'openai', name: '国外AI', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/ChatGPT.png', url: 'https://chat.openai.com/cdn-cgi/trace',
+        rules: ['DOMAIN-SUFFIX,grazie.ai', 'DOMAIN-SUFFIX,grazie.aws.intellij.net', 'RULE-SET,ai', 'RULE-SET,category-ai-chat-excluded-cn'],
+        providers: {
+            'ai': { behavior: 'domain', format: 'mrs', url: 'https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@clash-ruleset/ai.mrs', path: './ruleset/DustinWin/ai.mrs' },
+            'category-ai-chat-excluded-cn': { behavior: 'domain', format: 'mrs', url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ai-chat-!cn.mrs', path: './ruleset/MetaCubeX/category-ai-chat-excluded-cn.mrs' }
+        }
+    },
+    { key: 'youtube', name: 'YouTube', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/YouTube.png', url: 'https://www.youtube.com/s/desktop/494dd881/img/favicon.ico', rules: ['GEOSITE,youtube'] },
+    { key: 'github', name: 'GitHub', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/GitHub.png', url: 'https://github.com/favicon.ico', rules: ['GEOSITE,github'] },
+    { key: 'telegram', name: 'Telegram', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Telegram.png', url: 'http://www.telegram.org/img/website_icon.svg', rules: ['GEOIP,telegram'] },
+    { key: 'apple', name: '苹果服务', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Apple_2.png', url: 'http://www.apple.com/library/test/success.html', rules: ['GEOSITE,apple-cn'] },
+    { key: 'google', name: '谷歌服务', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Google_Search.png', url: 'http://www.google.com/generate_204', rules: ['GEOSITE,google'] },
+    { key: 'microsoft', name: '微软服务', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Microsoft.png', url: 'http://www.msftconnecttest.com/connecttest.txt', rules: ['GEOSITE,microsoft@cn,国内网站', 'GEOSITE,microsoft'] },
+    // 功能性分组
+    { key: 'games', name: '游戏专用', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Game.png', rules: ['GEOSITE,category-games@cn,国内网站', 'GEOSITE,category-games'] },
+    { key: 'tracker', name: '跟踪分析', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Reject.png', rules: ['GEOSITE,tracker'], proxies: ['REJECT', '直连', '默认节点'] },
+    { key: 'ads', name: '广告过滤', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Advertising.png', rules: ['GEOSITE,category-ads-all'], proxies: ['REJECT', '直连', '默认节点'] },
+    // 特殊地区/网站
+    { key: 'japan', name: '日本网站', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/JP.png', url: 'https://r.r10s.jp/com/img/home/logo/touch.png',
+        rules: ['RULE-SET,category-bank-jp', 'GEOIP,jp,日本网站,no-resolve'],
+        providers: {
+            'category-bank-jp': { behavior: 'domain', format: 'mrs', url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-bank-jp.mrs', path: './ruleset/MetaCubeX/category-bank-jp.mrs' }
+        }
+    },
+    // 流媒体服务
+    { key: 'netflix', name: 'NETFLIX', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Netflix.png', url: 'https://api.fast.com/netflix/speedtest/v2?https=true', rules: ['GEOSITE,netflix'] },
+    // ... 其他服务定义 ...
+];
+
+// =======================================================================
+// III. 主逻辑函数
+// =======================================================================
+function main(config) {
+    // 如果总开关关闭，则不执行任何操作
+    if (!enable) return config;
+
+    // 检查配置文件中是否存在代理节点，如果没有则抛出错误
+    const proxyCount = config?.proxies?.length ?? 0;
+    if (proxyCount === 0) {
+        throw new Error('配置文件中未找到任何代理节点');
+    }
+
+    // --- 1. 核心基础配置覆写 ---
+    // 这部分会强制覆盖你原始配置文件中的设置，以确保脚本环境的一致性。
+    config['allow-lan'] = true;       // 允许局域网连接
+    config['bind-address'] = '*';     // 监听所有网络接口
+    config['mode'] = 'rule';          // 规则模式
+    config['profile'] = { 'store-selected': true, 'store-fake-ip': true }; // 持久化选择和fake-ip
+    config['geodata-loader'] = 'memconservative'; // 适合小内存设备的geodata加载器
+
+    // DNS 配置
+    config['dns'] = {
+        enable: true, listen: ':1053', ipv6: true,
+        'enhanced-mode': 'fake-ip', 'fake-ip-range': '198.18.0.1/16',
+        nameserver: [...foreignDNS],
+        'proxy-server-nameserver': [...foreignDNS],
+        'nameserver-policy': {
+            'geosite:private': 'system', // 私有地址和域名走系统DNS
+            'geosite:cn,apple@cn,microsoft@cn': chinaDNS, // 国内相关域名走国内DNS
+        },
+    };
+    
+    // ... 其他核心配置，如sniffer, ntp等 ...
+
+    // --- 2. 动态生成区域策略组 ---
+    // 遍历 `regionOptions`，根据正则表达式筛选节点，创建 url-test 测速组。
+    let regionProxyGroups = [];
+    let otherProxyGroups = config.proxies.map(p => p.name);
+
+    regionOptions.regions.forEach(region => {
+        const proxies = config.proxies
+            .filter(p => {
+                const multiplier = /(?<=[xX✕✖⨉倍率])([1-9]+(\.\d+)*|0{1}\.\d+)/i.exec(p.name)?.[1];
+                return p.name.match(region.regex) && parseFloat(multiplier || '0') <= region.ratioLimit;
+            })
+            .map(p => p.name);
+
+        if (proxies.length > 0) {
+            regionProxyGroups.push({
+                ...groupBaseOption, name: region.name, type: 'url-test',
+                tolerance: 50, icon: region.icon, proxies: proxies,
+            });
+            otherProxyGroups = otherProxyGroups.filter(name => !proxies.includes(name));
+        }
+    });
+    const regionProxyGroupNames = regionProxyGroups.map(g => g.name);
+
+    // --- 3. 初始化规则、Providers 和策略组数组 ---
+    const rules = ['PROCESS-NAME,SunloginClient,DIRECT', 'PROCESS-NAME,SunloginClient.exe,DIRECT'];
+    const ruleProviders = new Map();
+    let serviceProxyGroups = [];
+
+    // --- 4. 数据驱动：生成服务策略组和规则 ---
+    // 这是脚本的核心循环，它将 `serviceDefinitions` 中的蓝图变为现实。
+    // [MODIFIED] 为服务组的默认代理列表添加 "其他节点"
+    const defaultServiceProxies = ['默认节点', ...regionProxyGroupNames, ...(otherProxyGroups.length > 0 ? ['其他节点'] : []), '直连'];
+
+    serviceDefinitions.forEach(service => {
+        // 检查此服务的开关是否在 `ruleOptions` 中为 true
+        if (ruleOptions[service.key]) {
+            // A. 生成规则: 遍历服务定义中的 rules 数组
+            service.rules.forEach(rule => {
+                const parts = rule.split(',');
+                // 如果规则本身不带策略组（部件少于3个），则自动把服务名作为策略组加上
+                const targetGroup = parts.length < 3 ? `,${service.name}` : '';
+                rules.push(`${rule}${targetGroup}`);
+            });
+
+            // B. 生成 Rule Providers: 如果有定义，则添加
+            if (service.providers) {
+                for (const [name, providerConfig] of Object.entries(service.providers)) {
+                    ruleProviders.set(name, { ...ruleProviderCommon, ...providerConfig });
+                }
+            }
+            
+            // C. 生成策略组: 创建一个 select 策略组
+            const group = { 
+                ...groupBaseOption, 
+                name: service.name, 
+                type: 'select', 
+                proxies: service.proxies || defaultServiceProxies // 优先使用自定义代理列表
+            };
+            if (service.url) group.url = service.url;
+            if (service.icon) group.icon = service.icon;
+            serviceProxyGroups.push(group);
+        }
+    });
+
+    // --- 5. 定义核心功能策略组 ---
+    // 这些是与具体服务无关，但对整体体验很重要的策略组。
+    const coreProxyGroups = [
+        { ...groupBaseOption, name: '下载软件', type: 'select', proxies: ['直连', 'REJECT', '默认节点', ...regionProxyGroupNames], icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Download.png' },
+        { ...groupBaseOption, name: '其他外网', type: 'select', proxies: ['默认节点', ...regionProxyGroupNames], icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Streaming!CN.png' },
+        { ...groupBaseOption, name: '国内网站', type: 'select', proxies: ['直连', '默认节点', ...regionProxyGroupNames], url: 'http://wifi.vivo.com.cn/generate_204', icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/StreamingCN.png' },
+    ];
+    
+    // --- 6. 定义 "默认节点" 和 "其他节点" 策略组 ---
+    const defaultProxyGroup = { ...groupBaseOption, name: '默认节点', type: 'select', proxies: [...regionProxyGroupNames, ...(otherProxyGroups.length > 0 ? ['其他节点'] : []), '直连'], icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Proxy.png' };
+    
+    let otherNodesGroup = null;
+    if (otherProxyGroups.length > 0) {
+        otherNodesGroup = { ...groupBaseOption, name: '其他节点', type: 'select', proxies: otherProxyGroups, icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/World_Map.png' };
+    }
+
+    // --- 7. 组合最终的策略组列表 (按要求排序) ---
+    // [MODIFIED] 调整策略组顺序
+    config['proxy-groups'] = [
+        defaultProxyGroup,      // 1. 默认节点在前
+        ...serviceProxyGroups,  // 2. 所有服务组居中
+        ...coreProxyGroups,     // 3. 核心功能组在后
+        ...regionProxyGroups,   // 4. 自动生成的区域组
+        ...(otherNodesGroup ? [otherNodesGroup] : []) // 5. 其他节点组（如果存在）
+    ];
+    
+    // --- 8. 添加最终规则和静态Rule Provider ---
+    // 这些规则是规则列表的“兜底”规则，决定了未被前面服务规则匹配到的流量的去向。
+    rules.push(
+        'RULE-SET,applications,下载软件',
+        'GEOSITE,private,DIRECT',               // 私有地址直连
+        'GEOIP,private,DIRECT,no-resolve',      // 私有IP直连
+        'GEOSITE,cn,国内网站',                  // 国内网站走“国内网站”策略组
+        'GEOIP,cn,国内网站,no-resolve',         // 国内IP走“国内网站”策略组
+        'MATCH,其他外网'                        // 所有其他未匹配的流量，走“其他外网”策略组
+    );
+    ruleProviders.set('applications', { ...ruleProviderCommon, behavior: 'classical', format: 'text', url: 'https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@clash-ruleset/applications.list', path: './ruleset/DustinWin/applications.list' });
+
+    // --- 9. 最终整合并返回配置 ---
+    config.proxies.push({ name: '直连', type: 'direct', udp: true }); // 确保有直连节点
+    config['rules'] = rules;
+    config['rule-providers'] = Object.fromEntries(ruleProviders);
+
+    return config;
+}
