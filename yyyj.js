@@ -1,6 +1,6 @@
 /*************************************
 [rewrite_local]
-^https?:\/\/lcapi\.engcorner\.cn\/1\.1\/users\/[^/]+ url script-response-body https://raw.githubusercontent.com/test/Script/master/yyyj.js
+^https?:\/\/lcapi\.engcorner\.cn\/1\.1\/users\/[^/]+ url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/yyyj.js
 
 [mitm]
 hostname = lcapi.engcorner.cn
