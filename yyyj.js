@@ -100,10 +100,12 @@ if (url.indexOf("verifyReceipt") !== -1) {
 // ======= 逻辑2：用户信息接口改写 (Users API) =======
 else if (url.indexOf("/users/") !== -1) {
     obj.isVip = true;
+    obj.vipType = "2";
     obj.gender = "男";
     obj.diamondCount = 999999;
     obj.emailVerified = true;
     obj.mobilePhoneVerified = true;
+    obj.vipExpireTime = "2099-09-09 14:17:18";
 }
 
 $done({ body: JSON.stringify(obj) });
