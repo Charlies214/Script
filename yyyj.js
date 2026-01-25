@@ -1,24 +1,17 @@
 /*
 [rewrite_local]
-# 匹配苹果内购验证接口
-^https:\/\/buy\.itunes\.apple\.com\/verifyReceipt url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/yyyj.js
-
-# 匹配用户信息接口 (通配 ID)
-^https?:\/\/lcapi\.engcorner\.cn\/1\.1\/users\/[^/]+ url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/yyyj.js
+^https?:\/\/(buy\.itunes\.apple\.com\/verifyReceipt|lcapi\.engcorner\.cn\/1\.1\/users\/|speechenglish\.cn\/(activityVip\/gifts|apple\/productInfo)) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/yyyj.js
 
 [mitm]
-hostname = buy.itunes.apple.com, lcapi.engcorner.cn
+hostname = buy.itunes.apple.com, lcapi.engcorner.cn, speechenglish.cn
 **/
 
 /*************************************
-英语演讲 多功能合一脚本
-- 破解内购收据 (2099过期 / 2026购买)
-- 修改用户属性 (VIP/性别/钻石/等级)
+英语演讲 脚本
 *************************************/
 
 let url = $request.url;
 let body = $response.body;
-
 if (!body) $done({});
 
 var obj = JSON.parse(body);
@@ -100,12 +93,24 @@ if (url.indexOf("verifyReceipt") !== -1) {
 // ======= 逻辑2：用户信息接口改写 (Users API) =======
 else if (url.indexOf("/users/") !== -1) {
     obj.isVip = true;
-    obj.vipType = "2";
+    obj.vipType = "2"; 
     obj.gender = "男";
     obj.diamondCount = 999999;
     obj.emailVerified = true;
     obj.mobilePhoneVerified = true;
     obj.vipExpireTime = "2099-09-09 14:17:18";
+    obj.vip_limit = "2099-09-09 14:17:18";
 }
-
+else if (url.indexOf("activityVip/gifts") !== -1) {
+    obj.data = [
+      {
+        "id": "vip_permanent",
+        "giftName": "永久会员特权",
+        "startTime": "2024-01-24T00:00:00.000Z",
+        "endTime": "2099-09-09T23:59:59.000Z",
+        "vipType": "2" 
+      }
+    ];
+    obj.code = 200;
+}
 $done({ body: JSON.stringify(obj) });
