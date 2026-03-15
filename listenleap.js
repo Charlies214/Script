@@ -15,7 +15,7 @@
 ^https?:\/\/(www|api)\.listenleap\.com\/front-api\/user\/getUserInfoByUserToken url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/listenleap.js
 
 [mitm]
-hostname = www.listenleap.com
+hostname = *.listenleap.com
 *
 *
 */
