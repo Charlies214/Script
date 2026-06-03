@@ -15,54 +15,35 @@ hostname = api.trancy.org
 
 var chxm1023 = JSON.parse($response.body);
 
-chxm1023.data = {
-    ...chxm1023.data,
-    "premium": true,
-    "admin": true,
-    "AIEngineActive": true,
-    "stripeAIEngineActive": true,
-    "stripePremiumActive": true,
-    "subscription": 1,
-    "expireAt": 4092599349000
-};
+chxm1023.data.premium = true;
+chxm1023.data.admin = true;
+chxm1023.data.AIEngineActive = true;
+chxm1023.data.stripeAIEngineActive = true;
+chxm1023.data.stripePremiumActive = true;
+chxm1023.data.subscription = 1;
+chxm1023.data.expireAt = 4092599349000;
 
-chxm1023.data.quota = {
-    ...chxm1023.data.quota,
+chxm1023.data.quota.whisperx.limit = 999999999;
+chxm1023.data.quota.pdf.limit = 999999999;
 
-    "whisperx": {
-        "used": 0,
-        "limit": 999999999
-    },
+var bill = chxm1023.data.quota.AIEngineBill;
 
-    "pdf": {
-        "used": 0,
-        "limit": 999999999
-    },
+bill.Anthropic = 999999999;
+bill.AIEngineExpired = 4092599349000;
+bill.amount = 999999999;
+bill.DeepL = 999999999;
+bill.DeepSeek = 999999999;
+bill.balance = 999999999;
+bill.Google = 999999999;
+bill.GLM = 999999999;
+bill.OpenAI = 999999999;
+bill.tokens = 999999999;
+bill.premiumExpired = 4092599349000;
+bill.Meta = 999999999;
 
-    "AIEngineBill": {
-        ...chxm1023.data.quota.AIEngineBill,
+chxm1023.data.quota.AITokens.limit = 999999999;
+chxm1023.data.quota.AITokens.nextRecoveryAt = 4092599349000;
 
-        "Anthropic": 999999999,
-        "AIEngineExpired": 4092599349000,
-        "amount": 999999999,
-        "DeepL": 999999999,
-        "DeepSeek": 999999999,
-        "balance": 999999999,
-        "Google": 999999999,
-        "GLM": 999999999,
-        "OpenAI": 999999999,
-        "tokens": 999999999,
-        "premiumExpired": 4092599349000,
-        "Meta": 999999999,
-        "cost": 0,
-        "lastUpdateAt": "4092599349000"
-    },
-
-    "AITokens": {
-        "used": 0,
-        "limit": 999999999,
-        "nextRecoveryAt": 4092599349000
-    }
-};
-
-$response.body = JSON.stringify(chxm1023);
+$done({
+    body: JSON.stringify(chxm1023)
+});
