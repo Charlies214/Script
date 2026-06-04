@@ -29,6 +29,28 @@ if (url.includes("/1/user/profile") && body.data) {
         "stripePremiumActive": true
     };
 
+    // 强行向 profile 的 books 数组中注入雅思核心与全量词汇书
+    body.data.books = [
+        {
+            "source": "https://static.trancy.org/wordbook/IELTS.json?v=1728718747006",
+            "target": "en",
+            "title": "IELTS",
+            "count": 9388,
+            "updatedAt": 1728718747006,
+            "cover": "https://static.trancy.org/cms/wordbookimg/ielts.png?v=1728718747006",
+            "name": "IELTS"
+        },
+        {
+            "source": "https://static.trancy.org/wordbook/IELTS_core.json?v=1728718747006",
+            "target": "en",
+            "title": "IELTS_core",
+            "count": 3575,
+            "updatedAt": 1728718747006,
+            "cover": "https://static.trancy.org/cms/wordbookimg/ielts.png?v=1728718747006",
+            "name": "IELTS_core"
+        }
+    ];
+
     if (body.data.quota) {
         if (body.data.quota.whisperx) body.data.quota.whisperx.limit = 999999999;
         if (body.data.quota.pdf) body.data.quota.pdf.limit = 999999999;
