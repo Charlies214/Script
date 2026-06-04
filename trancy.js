@@ -1,18 +1,14 @@
 /*************************************
 
-
 使用声明：⚠️仅供参考，🈲转载与售卖！
 
 **************************************
 
 [rewrite_local]
-# 匹配 api.trancy.org 或 service.trancy.org 下的相关接口
-^https?:\/\/(api|service)\.trancy\.org\/(1\/user\/profile|2\/translator\/engines) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/trancy.js
+^https?:\/\/(api|service)\.trancy\.org\/(1\/user\/profile|2\/translator\/engines|1\/wordbooks) url script-response-body https://raw.githubusercontent.com/你的GitHub用户名/仓库名/main/trancy.js
 
 [mitm]
-# 必须将两个域名都加入 MITM 列表
 hostname = api.trancy.org, service.trancy.org
-
 
 *************************************/
 
@@ -79,19 +75,14 @@ else if (url.includes("/2/translator/engines") && body.data) {
         });
     }
 }
-// 3. 处理单词本接口 (Wordbooks)
+// 3. 处理单词本接口 (Wordbooks) - 兼容 api 和 service 双端
 else if (url.includes("/1/wordbooks") && body.data) {
     if (Array.isArray(body.data.books)) {
-        
-        // 【按需选择】这里我默认写了过滤 IELTS 的代码。
-        // 如果你想把所有单词本都加入，直接改成：body.data.myBooks = body.data.books;
-        
-        body.data.myBooks = body.data.books;
-        
+        // 自动提取所有雅思相关的词书加入到我的列表
+        body.data.myBooks = body.data.books.filter(book => book.name.includes("IELTS"));
     }
 }
 
 $done({
     body: JSON.stringify(body)
 });
-
