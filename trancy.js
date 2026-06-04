@@ -6,24 +6,26 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/api\.trancy\.org\/(1\/user\/profile|2\/translator\/engines) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/trancy.js
+# 匹配 api.trancy.org 或 service.trancy.org 下的相关接口
+^https?:\/\/(api|service)\.trancy\.org\/(1\/user\/profile|2\/translator\/engines) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/trancy.js
 
 [mitm]
-hostname = api.trancy.org
+# 必须将两个域名都加入 MITM 列表
+hostname = api.trancy.org, service.trancy.org
+
 
 *************************************/
-
 var body = JSON.parse($response.body);
 var url = $request.url;
 
-// 判断是否为用户信息接口
+// 1. 匹配任何域名的用户信息接口 (api.trancy.org 或 service.trancy.org)
 if (url.includes("/1/user/profile") && body.data) {
     
-    // 1. 安全地覆盖顶层会员权限（完美避开报错）
+    // 安全地覆盖顶层会员权限，保留用户原有的 id、email、name、token 等关键字段
     body.data = {
         ...body.data,
         "expireAt": 4092599349000,
-        "createdAt": 1717291137217,
+        "createdAt": body.data.createdAt || 1717291137217,
         "premium": true,
         "admin": true,
         "subscription": 1,
@@ -32,7 +34,7 @@ if (url.includes("/1/user/profile") && body.data) {
         "stripePremiumActive": true
     };
 
-    // 2. 只有当 quota 字段存在时，才去尝试修改深层额度
+    // 只有当旧接口的 quota 字段存在时，才去修改深层额度（防止新接口没有 quota 导致脚本崩溃）
     if (body.data.quota) {
         
         if (body.data.quota.whisperx) {
@@ -43,7 +45,6 @@ if (url.includes("/1/user/profile") && body.data) {
             body.data.quota.pdf.limit = 999999999;
         }
 
-        // 使用展开语法安全修改 AIEngineBill
         if (body.data.quota.AIEngineBill) {
             body.data.quota.AIEngineBill = {
                 ...body.data.quota.AIEngineBill,
@@ -62,7 +63,6 @@ if (url.includes("/1/user/profile") && body.data) {
             };
         }
 
-        // 使用展开语法安全修改 AITokens
         if (body.data.quota.AITokens) {
             body.data.quota.AITokens = {
                 ...body.data.quota.AITokens,
@@ -72,10 +72,9 @@ if (url.includes("/1/user/profile") && body.data) {
         }
     }
 } 
-// 判断是否为翻译引擎接口
+// 2. 判断是否为翻译引擎接口
 else if (url.includes("/2/translator/engines") && body.data) {
     
-    // 1. 安全修改引擎额度
     if (body.data.quota) {
         body.data.quota = {
             ...body.data.quota,
@@ -95,14 +94,11 @@ else if (url.includes("/2/translator/engines") && body.data) {
         };
     }
     
-    // 2. 安全遍历并解锁所有 AI 引擎模型
-    // 确保 engines 存在并且是一个数组
     if (Array.isArray(body.data.engines)) {
-        // 使用 map 重新生成包含 available: true 的新数组
         body.data.engines = body.data.engines.map(engine => {
             return {
-                ...engine, // 保留引擎原有的 id、图标、名称等属性
-                "available": true // 强制覆盖为可用状态
+                ...engine,
+                "available": true
             };
         });
     }
@@ -112,3 +108,4 @@ else if (url.includes("/2/translator/engines") && body.data) {
 $done({
     body: JSON.stringify(body)
 });
+
