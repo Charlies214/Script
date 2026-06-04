@@ -5,7 +5,7 @@
 **************************************
 
 [rewrite_local]
-^https?:\/\/(api|service)\.trancy\.org\/(1\/user\/profile|2\/translator\/engines|1\/wordbooks) url script-response-body https://raw.githubusercontent.com/你的GitHub用户名/仓库名/main/trancy.js
+^https?:\/\/(api|service)\.trancy\.org\/(1\/user\/profile|2\/translator\/engines|1\/wordbooks) url script-response-body https://raw.githubusercontent.com/Charlies214/Script/master/trancy.js
 
 [mitm]
 hostname = api.trancy.org, service.trancy.org
