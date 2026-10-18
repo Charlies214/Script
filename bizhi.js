@@ -1,5 +1,5 @@
 [mitm]
-hostname = cardwords-d2ge9e6goa1946987.api.tcloudbasegateway.com
+hostname = *.api.tcloudbasegateway.com
 
 [rewrite_local]
 ^https:\/\/cardwords-d2ge9e6goa1946987\.api\.tcloudbasegateway\.com\/v1\/database\/instances\/.*\/collections\/wpf_account\/documents.* url script-response-body https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/bizhi.js
