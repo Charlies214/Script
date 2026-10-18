@@ -2,11 +2,7 @@
 hostname = cardwords-d2ge9e6goa1946987.api.tcloudbasegateway.com
 
 [rewrite_local]
-# 1. 原有的单文档查询接口
-^https:\/\/cardwords-d2ge9e6goa1946987\.api\.tcloudbasegateway\.com\/v1\/database\/instances\/.*\/collections\/wpf_account\/documents\/.* url script-response-body https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/bizhi.js
-
-# 2. 新增的列表查询接口（带 query 参数）
-^https:\/\/cardwords-d2ge9e6goa1946987\.api\.tcloudbasegateway\.com\/v1\/database\/instances\/.*\/collections\/wpf_account\/documents\?.* url script-response-body https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/bizhi.js
+^https:\/\/cardwords-d2ge9e6goa1946987\.api\.tcloudbasegateway\.com\/v1\/database\/instances\/.*\/collections\/wpf_account\/documents.* url script-response-body https://raw.githubusercontent.com/Charlies214/Script/refs/heads/master/bizhi.js
 
 /***********************************************
 > 应用名称: 对应壁纸/会员系统安全测试脚本
